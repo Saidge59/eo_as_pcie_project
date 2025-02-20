@@ -21,6 +21,7 @@
 #include <linux/fs.h>
 
 #include <linux/uaccess.h> /* For copy_to_user, copy_from_user */
+#include "eo_as_ioctl.h" /*IOCTL function definition*/
 #include "eo_as_device.h"   /* Definitions structs */
 #include "eo_as_dma.h"      /*DMA function definition*/
 #include "hal_hwlayer.h" /* Suppose you implement your HAL read/write calls here */
@@ -67,6 +68,7 @@ static const struct file_operations eo_as_dev_fops = {
     .release = eo_as_dev_release,
     .read    = eo_as_dev_read,
     .write   = eo_as_dev_write,
+    .unlocked_ioctl = eo_as_dev_ioctl,
 };
 
 /* 

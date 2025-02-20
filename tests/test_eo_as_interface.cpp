@@ -40,7 +40,7 @@ int main()
                 if (iss >> bar >> std::hex >> offset >> std::dec >> value)
                 {
                     driver.write_register(bar, offset, value);
-                    std::cout << "Written " << value << " at offset 0x" << std::hex << offset << std::dec << "\n";
+                    std::cout << "Written 0x" << std::hex << value << " at offset 0x" << std::hex << offset << std::dec << "\n";
                 }
                 else
                 {
@@ -54,7 +54,7 @@ int main()
                 if (iss >> bar >> std::hex >> offset)
                 {
                     uint32_t value = driver.read_register(bar, offset);
-                    std::cout << "Read " << value << " from offset 0x" << std::hex << offset << std::dec << "\n";
+		    std::cout << "Read 0x" << std::hex << value << " from offset 0x" << offset << std::dec << "\n";
                 }
                 else
                 {
