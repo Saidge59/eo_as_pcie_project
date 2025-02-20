@@ -1,0 +1,16 @@
+
+build/
+
+eo_as_pcie_driver/*.ko
+eo_as_pcie_driver/*.o
+eo_as_pcie_driver/*.cmd
+
+tests/build/
+
+*.o
+
+*.symvers
+
+*.order
+
+*.mod
