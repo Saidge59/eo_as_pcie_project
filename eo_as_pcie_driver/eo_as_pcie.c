@@ -43,6 +43,7 @@ static int eo_as_dev_release(struct inode *inode, struct file *filp);
 static ssize_t eo_as_dev_read(struct file *filp, char __user *buf, size_t count, loff_t *ppos);
 static ssize_t eo_as_dev_write(struct file *filp, const char __user *buf, size_t count, loff_t *ppos);
 static irqreturn_t eo_as_fpga_irq_handler(int irq, void *dev_id);
+static int eo_as_dev_mmap(struct file *filp, struct vm_area_struct *vma);
 
 /* PCI device ID table */
 static const struct pci_device_id eo_as_pci_ids[] = {
@@ -69,6 +70,7 @@ static const struct file_operations eo_as_dev_fops = {
     .read    = eo_as_dev_read,
     .write   = eo_as_dev_write,
     .unlocked_ioctl = eo_as_dev_ioctl,
+    .mmap = eo_as_dev_mmap,
 };
 
 /* 
@@ -179,7 +181,7 @@ static int eo_as_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent
     eadev->hal.bar_length[0]  = bar_len0;
     eadev->hal.bar[1]         = eadev->bar1;
     eadev->hal.bar_length[1]  = bar_len1;
-    eadev->hal.num_bars       = 1;
+    eadev->hal.num_bars       = 2;
 
     /* Allocate MSI vector and request IRQ */
     ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI | PCI_IRQ_MSIX | PCI_IRQ_LEGACY);
@@ -231,23 +233,28 @@ static int eo_as_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent
     ret = cdev_add(&eadev->cdev, eadev->devt, 1);
     if (ret) {
         pr_err("eo_as_fpga_driver: cdev_add failed: %d\n", ret);
-        unregister_chrdev_region(eadev->devt, 1);
-        goto err_irq;
+        goto err_register_chrdev_region;
     }
    
     /* Create a device node under /dev */
     eadev->class = class_create(THIS_MODULE, EO_AS_DRIVER_NAME);
     if (IS_ERR(eadev->class)) {
         ret = PTR_ERR(eadev->class);
-        unregister_chrdev_region(eadev->devt, 1);
-        goto err_free_dma_channels;
+        goto err_cdev;
     }
+
     eadev->dev = device_create(eadev->class, NULL, eadev->devt, NULL, EO_AS_DRIVER_NAME);
     if (IS_ERR(eadev->dev)) {
         ret = PTR_ERR(eadev->dev);
         class_destroy(eadev->class);
-        unregister_chrdev_region(eadev->devt, 1);
-        goto err_free_dma_channels;
+        goto err_class_destroy;
+    }
+
+    eadev->dma_info = vzalloc(PAGE_SIZE);
+    if (!eadev->dma_info)
+    {
+        pr_err("Failed to allocate buffer\n");
+        goto err_device_create;
     }
     
     pr_info("eo_as_fpga_driver: probe success, major=%d minor=%d, bar0=0x%llx, bar1=0x%llx, MSI vector=%d\n",
@@ -256,6 +263,15 @@ static int eo_as_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent
             (unsigned long long)bar_start1,
             vector);
     return 0;
+
+err_device_create:
+    device_destroy(eadev->class, eadev->devt);
+err_class_destroy:
+    class_destroy(eadev->class);
+err_cdev:
+    cdev_del(&eadev->cdev);
+err_register_chrdev_region:
+    unregister_chrdev_region(eadev->devt, 1);
 err_free_dma_channels:
     eo_as_free_dma_buffers(eadev->dma_ctx);
     kfree(eadev->dma_ctx->channels);
@@ -295,6 +311,11 @@ static void eo_as_pci_remove(struct pci_dev *pdev)
     struct eo_as_device *eadev = pci_get_drvdata(pdev);
     if (!eadev)
         return;
+        
+    if (eadev->dma_info)
+    {
+        vfree(eadev->dma_info);
+    }
 
     /* disable interrupts in FPGA */
     hal_interrupt_disable(&eadev->hal);
@@ -381,10 +402,15 @@ static int eo_as_dev_release(struct inode *inode, struct file *filp)
  */
 static ssize_t eo_as_dev_read(struct file *filp, char __user *buf, size_t count, loff_t *ppos)
 {
-    struct eo_as_device *eadev = filp->private_data;
     u32 val;
     char tmp[16];
     int len;
+    struct eo_as_device *eadev = filp->private_data;
+    if(!eadev)
+    {
+        pr_err("eo_as_fpga_driver 'read': Not exist private_data\n");
+        return -EINVAL;
+    }
 
     val = hal_mmio_bar_read32(&eadev->hal, 0, 0x100);
     len = snprintf(tmp, sizeof(tmp), "0x%08x\n", val);
@@ -400,9 +426,14 @@ static ssize_t eo_as_dev_read(struct file *filp, char __user *buf, size_t count,
  */
 static ssize_t eo_as_dev_write(struct file *filp, const char __user *buf, size_t count, loff_t *ppos)
 {
-    struct eo_as_device *eadev = filp->private_data;
     char tmp[16];
     unsigned long val;
+    struct eo_as_device *eadev = filp->private_data;
+    if(!eadev)
+    {
+        pr_err("eo_as_fpga_driver 'write': Not exist private_data\n");
+        return -EINVAL;
+    }
 
     if (count >= sizeof(tmp))
         return -EINVAL;
@@ -415,6 +446,48 @@ static ssize_t eo_as_dev_write(struct file *filp, const char __user *buf, size_t
     hal_mmio_bar_write32(&eadev->hal, 0, 0x100, (u32)val);
     pr_info("eo_as_fpga_driver: wrote 0x%x to offset 0x100\n", (u32)val);
     return count;
+}
+
+
+static int eo_as_dev_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+    unsigned long pfn;
+    struct eo_as_dma_desc* desc;
+    int channel;
+    int descriptor;
+    struct eo_as_device *eadev = filp->private_data;
+    if(!eadev)
+    {
+        pr_err("eo_as_fpga_driver 'mmap': Not exist private_data\n");
+        return -EINVAL;
+    }
+
+    if(MAX_NUM_CHANNELS*MAX_NUM_DESCRIPTORS*sizeof(struct eo_as_dma_desc) > PAGE_SIZE)
+    {
+        pr_err("Too many channels or descriptions\n");
+		return -ENOMEM;
+    }
+
+    desc = (struct eo_as_dma_desc *)eadev->dma_info;
+
+    for (channel = 0; channel < MAX_NUM_CHANNELS; channel++)
+    {
+        for (descriptor = 0; descriptor < MAX_NUM_DESCRIPTORS; descriptor++)
+        {
+            int index = (channel * MAX_NUM_DESCRIPTORS) + descriptor;
+            desc[index].buf_va = (uint64_t)eadev->dma_ctx->channels[channel].descriptors[descriptor].buffer;
+            desc[index].buf_pa = (uint64_t)eadev->dma_ctx->channels[channel].descriptors[descriptor].dma_handle;
+            pr_info("Mapped struct: buf_va = 0x%llx, buf_pa = 0x%llx\n", desc[index].buf_va, desc[index].buf_pa);
+        }
+    }
+
+    pfn = vmalloc_to_pfn(eadev->dma_info);
+
+    if (remap_pfn_range(vma, vma->vm_start, pfn, PAGE_SIZE, vma->vm_page_prot))
+    {
+        return -EAGAIN;
+    }
+    return 0;
 }
 
 /**

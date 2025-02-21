@@ -15,8 +15,12 @@
 u32 hal_mmio_bar_read32(struct hal_context *hctx, u8 bar, u64 offset)
 {
     u32 data = 0;
-    if (!hctx || bar >= hctx->num_bars || bar >= DRV_MAX_NUM_BARS)
+    if (!hctx || bar >= hctx->num_bars || bar >= DRV_MAX_NUM_BARS){
+        pr_debug("hal_hwlayer: Read32 from failure bar =%d offset=0x%llx \n",
+        bar, offset);
         return 0xFFFFFFFF;
+    }
+      
 
     if (offset < hctx->bar_length[bar] && hctx->bar[bar]) {
         data = ioread32((void __iomem *)(hctx->bar[bar] + offset));

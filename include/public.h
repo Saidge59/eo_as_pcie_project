@@ -67,9 +67,9 @@ static inline uint64_t trans_form_fpga_address(uint64_t address)
 /* Registry-like operation for reading/writing a register */
 struct eo_as_registry_params
 {
-    uint8_t bar;      /* which BAR? */
     uint64_t address; /* register offset */
     uint32_t value;   /* read/write value */
+    uint32_t bar;      /* which BAR? */
 } __attribute__((packed));
 
 /*
@@ -90,7 +90,7 @@ struct eo_as_dma_desc
 
 struct eo_as_dma_channel
 {
-    struct eo_as_dma_desc *descs[MAX_NUM_DESCRIPTORS];
+    struct eo_as_dma_desc descs[MAX_NUM_DESCRIPTORS];
 } __attribute__((packed));
 
 struct eo_as_mem_map

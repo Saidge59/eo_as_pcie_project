@@ -74,6 +74,7 @@ struct eo_as_device {
     struct eo_as_event_data event_data;  /* if you store event data here */
     struct dma_device_context *dma_ctx;   /*This context contains the device pointer and an array of DMA channels  */
 
+    void *dma_info;         /* info about pa and va*/
     bool device_on;        /* example */
   
 

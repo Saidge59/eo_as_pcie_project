@@ -45,21 +45,26 @@ long eo_as_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
     case EO_AS_IOC_SET_DMA_REG: {
         struct eo_as_registry_params rp;
-        if (copy_from_user(&rp, (void __user *)arg, sizeof(rp))) {
+        if (copy_from_user(&rp, (struct eo_as_registry_params *)arg, sizeof(struct eo_as_registry_params))) {
             ret = -EFAULT;
             break;
         }
+
         hal_mmio_bar_write32(&dev->hal, rp.bar, rp.address, rp.value);
+
+	pr_info("eo_as_ioctl: set_dma_reg bar %d, addr 0x%llx, value 0x%x\n",
+            rp.bar, (unsigned long long)rp.address, rp.value);
         break;
     }
 
     case EO_AS_IOC_GET_DMA_REG: {
         struct eo_as_registry_params rp;
-        if (copy_from_user(&rp, (void __user *)arg, sizeof(rp))) {
+        if (copy_from_user(&rp, (struct eo_as_registry_params *)arg, sizeof(struct eo_as_registry_params))) {
 	    pr_err("eo_as_ioctl: copy from user get_dma_reg");
             ret = -EFAULT;
             break;
         }
+
         rp.value = hal_mmio_bar_read32(&dev->hal, rp.bar, rp.address);
 
 	pr_info("eo_as_ioctl: get_dma_reg bar %u, addr 0x%llx, value 0x%x\n", rp.bar, (unsigned long long)rp.address, rp.value);

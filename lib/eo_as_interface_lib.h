@@ -18,9 +18,9 @@ public:
 
     bool send_ioctl(unsigned long ioctlCode, void *inBuffer);
 
-    void write_register(uint8_t bar, uint64_t registerOffset, uint32_t value);
+    void write_register(uint32_t bar, uint64_t registerOffset, uint32_t value);
 
-    uint32_t read_register(uint8_t bar, uint64_t registerOffset);
+    uint32_t read_register(uint32_t bar, uint64_t registerOffset);
 
     int GetHandle() const;
 
