@@ -71,13 +71,8 @@ void driver_interface::read_DMA_memory_map_and_event_handles(struct eo_as_dma_pa
 
     auto read_memory_map = [&]()
     {
-        if (driverHandle_ < 0)
-        {
-            throw std::runtime_error("Invalid driver handle");
-        }
-
         if (!send_ioctl(EO_AS_IOC_DMA_PARAMS_GET, &dmaParam))
-        { 
+        {
             throw std::runtime_error("Failed to call EO_AS_IOC_DMA_PARAMS_GET");
         }
 
@@ -126,10 +121,6 @@ void driver_interface::start_stop_DMA_channel(uint8_t channel, bool isStartDmaCh
 
     auto start_stop_DMA_channel = [&]()
     {
-        if (driverHandle_ < 0)
-        {
-            throw std::runtime_error("Invalid driver handle");
-        }
         if (channel >= MAX_NUM_CHANNELS)
         {
             throw std::runtime_error("Invalid channel parameter");
@@ -154,11 +145,6 @@ void driver_interface::start_stop_DMA_global(bool isStartDmaGlobal, bool isRx)
 
     auto start_stop_DMA_global = [&]()
     {
-        if (driverHandle_ < 0)
-        {
-            throw std::runtime_error("Invalid driver handle");
-        }
-
         uint32_t value = isStartDmaGlobal ? 0x00000001 : 0x00000000;
         uint64_t address = isRx ? DEVICE_GLOBAL_DMA_ENABLE_FPGA_DATA : DEVICE_GLOBAL_DMA_MAX_DMA_CHANELS_DATA;
 
@@ -174,35 +160,28 @@ void driver_interface::start_DMA_configure(struct global_start_dma_configuration
 
     auto configuration_start_DMA = [&]()
     {
-        if (driverHandle_ < 0)
-        {
-            throw std::runtime_error("Invalid driver handle");
-        }
-
-	struct eo_as_dma_desc *dma_desc = (struct eo_as_dma_desc *)mmap(NULL, (sizeof(struct eo_as_dma_desc) * MAX_NUM_CHANNELS * MAX_NUM_DESCRIPTORS), PROT_READ | PROT_WRITE, MAP_SHARED, driverHandle_, 0);
+        struct eo_as_dma_desc *dma_desc = (struct eo_as_dma_desc *)mmap(NULL, (sizeof(struct eo_as_dma_desc) * MAX_NUM_CHANNELS * MAX_NUM_DESCRIPTORS), PROT_READ | PROT_WRITE, MAP_SHARED, driverHandle_, 0);
         if (dma_desc == MAP_FAILED)
         {
             throw std::runtime_error("Invalid driver memory");
         }
 
-        //uint32_t InterruptStatusValue = read_register(0, trans_form_fpga_address(DEVICE_GLOBAL_INTERRUPT_FPGA_STATUS));
-        //write_register(0, trans_form_fpga_address(DEVICE_GLOBAL_INTERRUPT_FPGA_DATA), 0x00FF);
+        uint32_t InterruptStatusValue = read_register(0, trans_form_fpga_address(DEVICE_GLOBAL_INTERRUPT_FPGA_STATUS));
+        write_register(0, trans_form_fpga_address(DEVICE_GLOBAL_INTERRUPT_FPGA_DATA), 0x00FF);
 
         for (int channel = 0; channel < MAX_NUM_CHANNELS; channel++)
         {
-            //write_register(0, trans_form_fpga_address(DEVICE_GLOBAL_DMA_REG_CONTROL) + 0x40 * channel, 0x00000000);
-            //write_register(0, trans_form_fpga_address(DEVICE_GLOBAL_DMA_REG_DESCRIPTORS_NUMBER) + 0x40 * channel, MAX_NUM_DESCRIPTORS);
+            write_register(0, trans_form_fpga_address(DEVICE_GLOBAL_DMA_REG_CONTROL) + 0x40 * channel, 0x00000000);
+            write_register(0, trans_form_fpga_address(DEVICE_GLOBAL_DMA_REG_DESCRIPTORS_NUMBER) + 0x40 * channel, MAX_NUM_DESCRIPTORS);
 
             for (int descriptor = 0; descriptor < MAX_NUM_DESCRIPTORS; descriptor++)
             {
                 int index = (channel * MAX_NUM_DESCRIPTORS) + descriptor;
-		struct eo_as_dma_desc *current_dma_desc = dma_desc + index;
+
+                struct eo_as_dma_desc *current_dma_desc = dma_desc + index;
                 data.chans[channel].descs[descriptor].buf_va = current_dma_desc->buf_va;
                 data.chans[channel].descs[descriptor].buf_pa = current_dma_desc->buf_pa;
                 printf("Mapped struct: buf_va = 0x%lx, buf_pa = 0x%lx\n", data.chans[channel].descs[descriptor].buf_va, data.chans[channel].descs[descriptor].buf_pa);
-
-                continue;
-//----------------------------
 
                 uint32_t PaLowValue = data.chans[channel].descs[descriptor].buf_pa & 0xFFFFFFFF;
                 uint32_t PaHighValue = (data.chans[channel].descs[descriptor].buf_pa >> 32) & 0xFFFFFFFF;
@@ -218,13 +197,13 @@ void driver_interface::start_DMA_configure(struct global_start_dma_configuration
             }
         }
 
-	if (dma_desc)
+        if (dma_desc)
         {
             munmap(dma_desc, sizeof(struct eo_as_dma_desc));
             dma_desc = NULL;
         }
 
-        //write_register(0, trans_form_fpga_address(DEVICE_GLOBAL_DMA_PPS_TRIGER), 0x00000000);
+        write_register(0, trans_form_fpga_address(DEVICE_GLOBAL_DMA_PPS_TRIGER), 0x00000000);
     };
 
     configuration_start_DMA();

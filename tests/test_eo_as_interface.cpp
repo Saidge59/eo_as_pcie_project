@@ -8,9 +8,9 @@ void print_usage()
     std::cout << "Available commands:\n"
               << "  write_register <uint8_t bar> <uint64_t offset (hex)> <uint32_t value>\n"
               << "  read_register <uint8_t bar> <uint64_t offset (hex)>\n"
-              //<< "  read_DMA_memory_map_and_event_handles\n"
-              //<< "  start_stop_DMA_channel <uint8_t channel> <bool start> <bool cycle>\n"
-              //<< "  start_stop_DMA_global <bool start> <bool rx>\n"
+              << "  read_DMA_memory_map_and_event_handles\n"
+              << "  start_stop_DMA_channel <uint8_t channel> <bool start> <bool cycle>\n"
+              << "  start_stop_DMA_global <bool start> <bool rx>\n"
               << "  start_DMA_configure\n";
 }
 
@@ -65,7 +65,7 @@ int main()
                 std::cout << "Invalid parameters for read_register\n";
             }
         }
-        /*else if (cmd == "read_DMA_memory_map_and_event_handles")
+        else if (cmd == "read_DMA_memory_map_and_event_handles")
         {
             struct eo_as_dma_params dmaParams;
             struct eo_as_mem_map memoryData;
@@ -75,10 +75,14 @@ int main()
         }
         else if (cmd == "start_stop_DMA_channel")
         {
-            uint8_t channel;
-            bool isStart, isCycle;
-            if (iss >> channel >> isStart >> isCycle)
+            unsigned int tmp_channel;
+            bool tmp_isStart, tmp_isCycle;
+
+            if (iss >> tmp_channel >> tmp_isStart >> tmp_isCycle)
             {
+                uint8_t channel = static_cast<uint8_t>(tmp_channel);
+                bool isStart = static_cast<bool>(tmp_isStart);
+                bool isCycle = static_cast<bool>(tmp_isCycle);
                 driver.start_stop_DMA_channel(channel, isStart, isCycle);
                 std::cout << "DMA channel " << (uint8_t)channel << (isStart ? " started" : " stopped") << "\n";
             }
@@ -89,9 +93,11 @@ int main()
         }
         else if (cmd == "start_stop_DMA_global")
         {
-            bool isStart, isRx;
-            if (iss >> isStart >> isRx)
+            bool tmp_isStart, tmp_isRx;
+            if (iss >> tmp_isStart >> tmp_isRx)
             {
+                bool isStart = static_cast<bool>(tmp_isStart);
+                bool isRx = static_cast<bool>(tmp_isRx);
                 driver.start_stop_DMA_global(isStart, isRx);
                 std::cout << "Global DMA " << (isRx ? "receive" : "transmit") << " " << (isStart ? "started" : "stopped") << "\n";
             }
@@ -99,7 +105,7 @@ int main()
             {
                 std::cout << "Invalid parameters for start_stop_DMA_global\n";
             }
-        }*/
+        }
         else if (cmd == "start_DMA_configure")
         {
             struct global_start_dma_configuration startDmaConfig;
