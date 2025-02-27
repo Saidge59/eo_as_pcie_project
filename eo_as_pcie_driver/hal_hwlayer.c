@@ -47,14 +47,14 @@ void hal_interrupt_disable(struct hal_context *hctx)
 {
     /* Example: Write 0 to a global interrupt enable register at offset 0x200 */
     pr_info("hal_hwlayer: Disabling interrupts\n");
-    hal_mmio_bar_write32(hctx, BAR0, 0x200, 0x0);
+    hal_mmio_bar_write32(hctx, BAR0, 0xc, 0x0);
 }
 
 void hal_interrupt_enable(struct hal_context *hctx)
 {
     /* Example: Write 1 to the same global interrupt enable register. */
     pr_info("hal_hwlayer: Enabling interrupts\n");
-    hal_mmio_bar_write32(hctx, BAR0, 0x200, 0x1);
+    hal_mmio_bar_write32(hctx, BAR0, 0xc, 0x1);
 }
 
 enum hal_status hal_is_our_interrupt(struct hal_context *hctx)
@@ -63,8 +63,8 @@ enum hal_status hal_is_our_interrupt(struct hal_context *hctx)
     if (!hctx) 
         return HAL_FAILED;
     /* Example: read a global interrupt status reg at offset 0x104 */
-    reg_val = hal_mmio_bar_read32(hctx, BAR0, 0x104);
-    pr_debug("hal_hwlayer: Checking global interrupt status=0x%x\n", reg_val);
+    reg_val = hal_mmio_bar_read32(hctx, BAR0, 0x14);
+    pr_info("hal_hwlayer: Checking global interrupt status=0x%x\n", reg_val);
 
     if (reg_val != 0)
         return HAL_SUCCESS;
@@ -76,7 +76,7 @@ u32 hal_read_interrupt_data(struct hal_context *hctx)
     if (!hctx)
         return 0xFFFFFFFF;
     /* e.g., read an interrupt data reg at offset 0x108 */
-    return hal_mmio_bar_read32(hctx, BAR0, 0x108);
+    return hal_mmio_bar_read32(hctx, BAR0, 0x18);
 }
 
 enum hal_status hal_is_dma_interrupt(struct hal_context *hctx, u32 dma_index)
@@ -91,5 +91,5 @@ void hal_global_interrupt_ack(struct hal_context *hctx)
 {
     /* e.g., write 1 to ack register */
     pr_info("hal_hwlayer: Global interrupt Ack\n");
-    hal_mmio_bar_write32(hctx, BAR0, 0x10C, 0x1);
+    hal_mmio_bar_write32(hctx, BAR0, 0x10, 0x1);
 }

@@ -50,7 +50,7 @@ static void eo_as_irq_bottom_half(unsigned long data)
     u32 interruptFifoValue;
     u16 descriptor, channel;
 
-    pr_debug("lin_isr: bottom_half started\n");
+    pr_info("lin_isr: bottom_half started\n");
 
     /* Acquire spinlock if modifying shared data in dev */
     spin_lock(&dev->lock);
@@ -65,7 +65,7 @@ static void eo_as_irq_bottom_half(unsigned long data)
         descriptor = (u16)((regValue & 0xFFFF0000) >> 16);
         channel    = (u16)(regValue & 0x0000FFFF);
 
-        pr_debug("lin_isr: channel=%u, descriptor=%u, regValue=0x%x\n",
+        pr_info("lin_isr: channel=%u, descriptor=%u, regValue=0x%x\n",
                  channel, descriptor, regValue);
 
         /* If needed, handle completion events, e.g. 
@@ -80,7 +80,7 @@ static void eo_as_irq_bottom_half(unsigned long data)
             hal_transform_fpga_address(DEVICE_GLOBAL_INTERRUPT_FPGA_STATUS)
         );
 
-        pr_debug("lin_isr: interruptFifoValue=%u after reading regValue\n", interruptFifoValue);
+        pr_info("lin_isr: interruptFifoValue=%u after reading regValue\n", interruptFifoValue);
 
     } while (interruptFifoValue != 0);
 
@@ -99,18 +99,18 @@ irqreturn_t eo_as_irq_handler(int irq, void *dev_id)
 {
     struct eo_as_device *dev = dev_id;
 
-    pr_debug("lin_isr: in top-half\n");
+    pr_info("lin_isr: in top-half\n");
 
     /* If device_on == false, ignore. Or if not our interrupt, ignore. */
     if (!dev->device_on)
         return IRQ_NONE;
-
+    pr_info("lin_isr: check if is  our interrupt\n");
     /* Check if it belongs to our device */
     if (hal_is_our_interrupt(&dev->hal) != HAL_SUCCESS) {
-        pr_debug("lin_isr: not our interrupt\n");
+        pr_info("lin_isr: not our interrupt\n");
         return IRQ_NONE;
     }
-
+    pr_info("lin_isr: is our interrupt\n");
     /* 
      * We'll init the tasklet each time or do it once at driver init. 
      * Here we do it each time for demonstration.

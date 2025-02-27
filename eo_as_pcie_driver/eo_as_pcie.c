@@ -25,7 +25,7 @@
 #include "eo_as_device.h"   /* Definitions structs */
 #include "eo_as_dma.h"      /*DMA function definition*/
 #include "hal_hwlayer.h" /* Suppose you implement your HAL read/write calls here */
-
+#include "lin_isr.h"
 
 /* Example PCI device IDs (Xilinx vendor 0x10EE, device 0x9011) */
 #define EO_AS_VENDOR_ID  0x10EE
@@ -42,7 +42,7 @@ static int eo_as_dev_open(struct inode *inode, struct file *filp);
 static int eo_as_dev_release(struct inode *inode, struct file *filp);
 static ssize_t eo_as_dev_read(struct file *filp, char __user *buf, size_t count, loff_t *ppos);
 static ssize_t eo_as_dev_write(struct file *filp, const char __user *buf, size_t count, loff_t *ppos);
-static irqreturn_t eo_as_fpga_irq_handler(int irq, void *dev_id);
+
 static int eo_as_dev_mmap(struct file *filp, struct vm_area_struct *vma);
 
 /* PCI device ID table */
@@ -73,24 +73,7 @@ static const struct file_operations eo_as_dev_fops = {
     .mmap = eo_as_dev_mmap,
 };
 
-/* 
- * Interrupt handler. Called when the FPGA triggers an interrupt.
- * We'll check if it's "our" interrupt, then read/ack as needed.
- */
-static irqreturn_t eo_as_fpga_irq_handler(int irq, void *dev_id)
-{
-    struct eo_as_device *eadev = dev_id;
-    /* Example: hal_is_our_interrupt checks some FPGA register. */
-    if (hal_is_our_interrupt(&eadev->hal) == HAL_SUCCESS) {
-        /* read data or do ack */
-        u32 data = hal_read_interrupt_data(&eadev->hal);
-        pr_info("eo_as_fpga_driver: IRQ data=0x%x\n", data);
 
-        hal_global_interrupt_ack(&eadev->hal); /* ack interrupt in FPGA */
-        return IRQ_HANDLED;
-    }
-    return IRQ_NONE;
-}
 
 /**
  * @brief Probe routine for the PCI driver.
@@ -190,7 +173,7 @@ static int eo_as_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent
         goto err_unmap1;
     }
     vector = pci_irq_vector(pdev, 0);
-    ret = request_irq(vector, eo_as_fpga_irq_handler, 0, 
+    ret = request_irq(vector, eo_as_irq_handler, 0, 
                       EO_AS_DRIVER_NAME, eadev);
     if (ret) {
         pr_err("eo_as_fpga_driver: request_irq (vector %d) failed: %d\n", vector, ret);
@@ -198,9 +181,8 @@ static int eo_as_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent
     }
     eadev->irq_registered = true;
     eadev->irq_line = vector;
-
-    /* enable interrupts in FPGA */
-    hal_interrupt_enable(&eadev->hal);
+ 
+    
 
     /* Allocate and initialize DMA buffers for FPGA operations */
     eadev->dma_ctx = (struct dma_device_context*)kzalloc(sizeof(struct dma_device_context), GFP_KERNEL);
@@ -256,7 +238,13 @@ static int eo_as_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent
         pr_err("Failed to allocate buffer\n");
         goto err_device_create;
     }
-    
+
+    eadev->dma_params.dma_desc_count = MAX_NUM_DESCRIPTORS;
+    eadev->dma_params.dma_buf_size = DESCRIPTOR_BUFFER_SIZE;
+    eadev->dma_params.dma_chan_count = MAX_NUM_CHANNELS;
+
+    eo_as_interrupt_enable(eadev);
+
     pr_info("eo_as_fpga_driver: probe success, major=%d minor=%d, bar0=0x%llx, bar1=0x%llx, MSI vector=%d\n",
             MAJOR(eadev->devt), MINOR(eadev->devt),
             (unsigned long long)bar_start0,
@@ -316,10 +304,8 @@ static void eo_as_pci_remove(struct pci_dev *pdev)
     {
         vfree(eadev->dma_info);
     }
-
     /* disable interrupts in FPGA */
-    hal_interrupt_disable(&eadev->hal);
-
+    eo_as_interrupt_disable(eadev);
     if (eadev->irq_registered) {
         free_irq(eadev->irq_line, eadev);
         eadev->irq_registered = false;

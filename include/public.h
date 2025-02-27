@@ -23,7 +23,7 @@
 #define MAX_NUM_CHANNELS_WITH_HEADER 8                ///< Maximum number of DMA channels for project with read size in header
 #define MAX_NUM_DESCRIPTORS 6                         ///< Maximum number of DMA descriptors per channel
 #define MAX_NUM_EVENTS_PER_DESCRIPTORS 3              ///< Maximum number of events per descriptor
-#define DESCRIPTOR_BUFFER_SIZE (256ULL * 1024 * 1024) ///< Descriptor buffer size set to 1 GB
+#define DESCRIPTOR_BUFFER_SIZE (32ULL * 1024 * 1024) ///< Descriptor buffer size set to 1 GB
 
 ///< COMMON MACROS
 ///< Alignment for X is power of 2
