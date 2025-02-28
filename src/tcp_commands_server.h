@@ -31,13 +31,13 @@
 /// @defgroup ChannelDefinitions Channel and Size Definitions
 /// @{
 #define LOCAL_RX_STREAMING_START_CHANNEL 0  ///< Starting channel for local RX streaming
-#define LOCAL_TX_STREAMING_START_CHANNEL 12 ///< Starting channel for local TX streaming
+#define LOCAL_TX_STREAMING_START_CHANNEL 8 ///< Starting channel for local TX streaming
 #define TCP_STREAMING_START_CHANNEL 0       ///< Starting channel for TCP streaming
 #define MAX_TCP_STREAMING_CHANNELS 8        ///< Maximum number of TCP streaming channels
 #define MAX_LOCAL_STREAMING_TX_CHANNELS 8   ///< Maximum number of local streaming TX channels
-#define MAX_LOCAL_STREAMING_RX_CHANNELS 12  ///< Maximum number of local streaming RX channels
-#define MAX_LOCAL_STREAMING_CHANNELS 20     ///< Maximum number of local streaming channels
-#define MAX_DESCRIPTORS_IN_CHANNEL 8        ///< Maximum number of descriptors in a channel
+#define MAX_LOCAL_STREAMING_RX_CHANNELS 8  ///< Maximum number of local streaming RX channels
+#define MAX_LOCAL_STREAMING_CHANNELS 8     ///< Maximum number of local streaming channels
+#define MAX_DESCRIPTORS_IN_CHANNEL 6        ///< Maximum number of descriptors in a channel
 #define SIZE_2MB 2 * 1024 * 1024            ///< Size definition for 2MB
 /// @}
 

@@ -92,7 +92,7 @@ void driver_interface::read_DMA_memory_map_and_event_handles(struct eo_as_dma_pa
                     throw std::runtime_error("Cannot create event for channel " + std::to_string(channel));
                 }
 
-                std::cout << "Created event: " << eventName << " for channel = " << channel << " and descriptor = " << descriptor << std::endl;
+                std::cout << "Created event: " << eventName << " for channel = " << channel << " and descriptor = " << descriptor << " eventfd " << sharedEventHandle_[index] << std::endl;
             }
         }
 

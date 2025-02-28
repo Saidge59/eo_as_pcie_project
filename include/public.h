@@ -131,6 +131,7 @@ struct global_start_dma_configuration
 struct eo_as_event_desc
 {
     uint64_t event_handle; /* user-provided token */
+    struct eventfd_ctx *event_ctx;
 } __attribute__((packed));
 
 struct eo_as_event_chan

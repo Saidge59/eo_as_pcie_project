@@ -53,8 +53,6 @@ tcp_command_server::tcp_command_server(shared_state &state, uint16_t port, const
       running_(false),
       driver_interface_(devicePath)
 {
-    memset(&start_dma_configuration_, 0, sizeof(start_dma_configuration_));
-
     for (size_t i = 0; i < MAX_LOCAL_STREAMING_CHANNELS; i++)
     {
         if (i < MAX_TCP_STREAMING_CHANNELS)
@@ -160,12 +158,10 @@ void tcp_command_server::stop()
         {
             local_rx_streaming_stop_event_[i] = 1;
             local_rx_streaming_running_[i] = false;
-
             for (size_t d = 0; d < start_dma_configuration_.start_dma_channels[i + LOCAL_RX_STREAMING_START_CHANNEL].dma_descriptors_count; ++d)
             {
                 int event_fd = event_data_.chans[i].events[d].event_handle;
-                if(event_fd != -1)
-                    close(event_fd);
+                close(event_fd);
 
                 if (local_rx_worker_threads_[i][d].joinable())
                 {
@@ -560,51 +556,47 @@ void tcp_command_server::handle_sampler_start_local_streaming(int client_socket,
                         if (local_rx_streaming_stop_event_[local_channel_idx]) {
                             break;
                         }
-                        
                         int ret = poll(&pfd, 1, -1);
                         if (ret > 0 && (pfd.revents & POLLIN)) 
                         {
                             uint64_t value;
-                            read(event_fd, &value, sizeof(value));
-
-                            char* data_buffer = reinterpret_cast<char*>(virtual_address);
-
-                            std::cout << "virtual_address " << std::hex << virtual_address << " eventfd " << event_fd << std::endl;
-                            std::cout << "channel " << local_channel_idx << " descriptor " << descriptor_idx << std::endl;
-
-                            // Placeholder for actual DMA data size retrieval
-                            size_t data_size = 0;
-                            pmessage_header header = reinterpret_cast<pmessage_header>(virtual_address);
-
-                            std::cout << "header->prefix1 " << header->prefix1  << std::endl;
-    
-                            /*if (header->prefix1 == 0xaaaaaaaa) {
-                                std::cout << "Local: DMA event signaled for channel " << dma_channel_idx 
-                                            << ", descriptor " << descriptor_idx 
-                                            << ", header->msg_id = " << header->msg_id 
-                                            << ", virtualAddress = 0x" << std::hex << virtual_address << std::endl;
-                                
-                                if (last_seq_id && (header->msg_id - last_seq_id) != MAX_NUM_DESCRIPTORS) {
-                                    std::cerr << "Error in data: header->DMA_id expected: 0x" << std::hex 
-                                                << (last_seq_id + MAX_NUM_DESCRIPTORS) << " received: 0x" << header->msg_id << std::endl;
+                            if(read(event_fd, &value, sizeof(value)) != sizeof(value)) 
+                            {
+                                char* data_buffer = reinterpret_cast<char*>(virtual_address);
+                                // Placeholder for actual DMA data size retrieval
+                                size_t data_size = 0;
+                                pmessage_header header = reinterpret_cast<pmessage_header>(virtual_address);
+        
+                                if (header->prefix1 == 0xaaaaaaaa) {
+                                    std::cout << "Local: DMA event signaled for channel " << dma_channel_idx 
+                                              << ", descriptor " << descriptor_idx 
+                                              << ", header->msg_id = " << header->msg_id 
+                                              << ", virtualAddress = 0x" << std::hex << virtual_address << std::endl;
+                                    
+                                    if (last_seq_id && (header->msg_id - last_seq_id) != MAX_NUM_DESCRIPTORS) {
+                                        std::cerr << "Error in data: header->DMA_id expected: 0x" << std::hex 
+                                                  << (last_seq_id + MAX_NUM_DESCRIPTORS) << " received: 0x" << header->msg_id << std::endl;
+                                    }
+                                    last_seq_id = header->msg_id;
+                                    data_size = static_cast<size_t>(header->size);
+        
+                                    // Implement memcpy logic for tests
+                                    if (dma_channel_idx == 8 && test_id == SAMPLER_TEST_TX_CP_CH_8_TO_CH_12) {
+                                        uint64_t virtual_address_tx = memory_data_.chans[LOCAL_TX_STREAMING_START_CHANNEL].descs[descriptor_idx].buf_va;
+                                        char* data_buffer_dest = reinterpret_cast<char*>(virtual_address_tx);
+                                        memcpy(data_buffer_dest, data_buffer, data_size);
+                                    }
+                                    // Add other test cases similarly...
+        
+                                    if (header->is_counter_mode == 1) {
+                                        int offset = 0x140;
+                                        bool result = verify_data_integrity(data_buffer, data_size, offset);
+                                        std::cout << "Data integrity check " << (result ? "passed" : "failed") << std::endl;
+                                    }
                                 }
-                                last_seq_id = header->msg_id;
-                                data_size = static_cast<size_t>(header->size);
-    
-                                // Implement memcpy logic for tests
-                                if (dma_channel_idx == 8 && test_id == SAMPLER_TEST_TX_CP_CH_8_TO_CH_12) {
-                                    uint64_t virtual_address_tx = memory_data_.chans[LOCAL_TX_STREAMING_START_CHANNEL].descs[descriptor_idx].buf_va;
-                                    char* data_buffer_dest = reinterpret_cast<char*>(virtual_address_tx);
-                                    memcpy(data_buffer_dest, data_buffer, data_size);
-                                }
-                                // Add other test cases similarly...
-    
-                                if (header->is_counter_mode == 1) {
-                                    int offset = 0x140;
-                                    bool result = verify_data_integrity(data_buffer, data_size, offset);
-                                    std::cout << "Data integrity check " << (result ? "passed" : "failed") << std::endl;
-                                }
-                            }*/
+                            } else {
+                                std::cout << "Event received! Value: " << value << std::endl;
+                            }
                         }
 
                         std::this_thread::sleep_for(std::chrono::milliseconds(10));

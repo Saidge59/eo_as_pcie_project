@@ -10,22 +10,10 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/uaccess.h> /* copy_to_user, copy_from_user */
-#include "hal_hwlayer.h"   /* If you need hal_* calls. */
-#include "eo_as_device.h"   /* Definitions structs */
-
-/*
- * Suppose your main device struct is defined in "eo_as_pci.h" something like:
- *  struct eo_as_device {
- *      spinlock_t lock;
- *      struct hal_context hal;
- *      struct eo_as_dma_params dma_params;
- *      struct eo_as_mem_map    mem_map;
- *      struct eo_as_event_data event_data;
- *      ...
- *  };
- * We'll assume we can cast filp->private_data to eo_as_device.
- */
+#include <linux/uaccess.h>
+#include "hal_hwlayer.h"
+#include "eo_as_device.h"
+#include <linux/eventfd.h>
 
 /**
  * @brief The single IOCTL handling function, replacing the Windows EvtIoDeviceControl code.
@@ -41,77 +29,97 @@ long eo_as_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     struct eo_as_device *dev = filp->private_data;
     long ret = 0;
 
-    switch (cmd) {
+    switch (cmd)
+    {
 
-    case EO_AS_IOC_SET_DMA_REG: {
+    case EO_AS_IOC_SET_DMA_REG:
+    {
         struct eo_as_registry_params rp;
-        if (copy_from_user(&rp, (struct eo_as_registry_params *)arg, sizeof(struct eo_as_registry_params))) {
+        if (copy_from_user(&rp, (struct eo_as_registry_params *)arg, sizeof(struct eo_as_registry_params)))
+        {
             ret = -EFAULT;
             break;
         }
 
         hal_mmio_bar_write32(&dev->hal, rp.bar, rp.address, rp.value);
 
-	pr_info("eo_as_ioctl: set_dma_reg bar %d, addr 0x%llx, value 0x%x\n",
-            rp.bar, (unsigned long long)rp.address, rp.value);
+        pr_info("eo_as_ioctl: set_dma_reg bar %d, addr 0x%llx, value 0x%x\n",
+                rp.bar, (unsigned long long)rp.address, rp.value);
         break;
     }
 
-    case EO_AS_IOC_GET_DMA_REG: {
+    case EO_AS_IOC_GET_DMA_REG:
+    {
         struct eo_as_registry_params rp;
-        if (copy_from_user(&rp, (struct eo_as_registry_params *)arg, sizeof(struct eo_as_registry_params))) {
-	    pr_err("eo_as_ioctl: copy from user get_dma_reg");
+        if (copy_from_user(&rp, (struct eo_as_registry_params *)arg, sizeof(struct eo_as_registry_params)))
+        {
+            pr_err("eo_as_ioctl: copy from user get_dma_reg");
             ret = -EFAULT;
             break;
         }
 
         rp.value = hal_mmio_bar_read32(&dev->hal, rp.bar, rp.address);
 
-	pr_info("eo_as_ioctl: get_dma_reg bar %u, addr 0x%llx, value 0x%x\n", rp.bar, (unsigned long long)rp.address, rp.value);
+        pr_info("eo_as_ioctl: get_dma_reg bar %u, addr 0x%llx, value 0x%x\n", rp.bar, (unsigned long long)rp.address, rp.value);
 
         if (copy_to_user((void __user *)arg, &rp, sizeof(rp)))
             ret = -EFAULT;
         break;
     }
 
-    case EO_AS_IOC_GET_DMA_STATUS: {
-        __u32 dma_status = 0; /* Suppose you read from a FPGA reg or dev->some_state */
-        /* Example: read a status register: */
+    case EO_AS_IOC_GET_DMA_STATUS:
+    {
+        __u32 dma_status = 0;
         dma_status = hal_mmio_bar_read32(&dev->hal, 0, 0x200);
         if (copy_to_user((void __user *)arg, &dma_status, sizeof(dma_status)))
             ret = -EFAULT;
         break;
     }
 
-    case EO_AS_IOC_DMA_PARAMS_GET: {
-        /* user wants to read dev->dma_params */
+    case EO_AS_IOC_DMA_PARAMS_GET:
+    {
         if (copy_to_user((void __user *)arg, &dev->dma_params, sizeof(dev->dma_params)))
             ret = -EFAULT;
         break;
     }
 
-    case EO_AS_IOC_MEM_MAP_GET: {
-        /* read dev->mem_map to user. */
+    case EO_AS_IOC_MEM_MAP_GET:
+    {
         if (copy_to_user((void __user *)arg, &dev->mem_map, sizeof(dev->mem_map)))
             ret = -EFAULT;
         break;
     }
 
-    case EO_AS_IOC_EVENT_HANDLE_SET: {
-        /* In Windows code, you had ObReferenceObjectByHandle. 
-           In Linux, there's no direct handle. We'll store the user-supplied data. */
-        struct eo_as_event_data ev;
-        if (copy_from_user(&ev, (void __user *)arg, sizeof(ev))) {
+    case EO_AS_IOC_EVENT_HANDLE_SET:
+    {
+        int event_handles[MAX_NUM_CHANNELS * MAX_NUM_DESCRIPTORS];
+
+        if (copy_from_user(event_handles, (void __user *)arg, sizeof(event_handles)))
+        {
             ret = -EFAULT;
             break;
         }
-        dev->event_data = ev; 
-        /* Possibly do something with these 'handles' or store them as tokens. */
+        
+        uint32_t channel;
+        uint32_t descriptor;
+
+        for (channel = 0; channel < MAX_NUM_CHANNELS; ++channel)
+        {
+            for (descriptor = 0; descriptor < MAX_NUM_DESCRIPTORS; ++descriptor)
+            {
+                int index = channel * MAX_NUM_DESCRIPTORS + descriptor;
+                dev->event_data.chans[channel].events[descriptor].event_handle = event_handles[index];
+                dev->event_data.chans[channel].events[descriptor].event_ctx = eventfd_ctx_fdget(event_handles[index]);
+                pr_info("event_handle: %d, event_ctx: %p\n", 
+                    dev->event_data.chans[channel].events[descriptor].event_handle,
+                    dev->event_data.chans[channel].events[descriptor].event_ctx);
+            }
+        }
         break;
     }
 
-    case EO_AS_IOC_EVENT_HANDLE_GET: {
-        /* copy out dev->event_data */
+    case EO_AS_IOC_EVENT_HANDLE_GET:
+    {
         if (copy_to_user((void __user *)arg, &dev->event_data, sizeof(dev->event_data)))
             ret = -EFAULT;
         break;

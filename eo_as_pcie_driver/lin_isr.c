@@ -17,10 +17,11 @@
 #include <linux/printk.h>
 #include <linux/types.h>
 #include <linux/errno.h>
-#include "hal_hwlayer.h"    /* For hal_is_our_interrupt, hal_read_interrupt_data, hal_global_interrupt_ack,
+#include "hal_hwlayer.h"  /* For hal_is_our_interrupt, hal_read_interrupt_data, hal_global_interrupt_ack,
                                hal_transform_fpga_address, and DEVICE_GLOBAL_INTERRUPT_FPGA_STATUS if they live here */
-#include "lin_isr.h"        /* Declarations for eo_as_irq_handler, etc. */
-#include "eo_as_device.h"   /* Definition of struct eo_as_device: includes dev->hal, dev->lock, etc. */
+#include "lin_isr.h"      /* Declarations for eo_as_irq_handler, etc. */
+#include "eo_as_device.h" /* Definition of struct eo_as_device: includes dev->hal, dev->lock, etc. */
+#include <linux/eventfd.h>
 
 /*
  * Example 'struct eo_as_device' (from eo_as_device.h):
@@ -33,8 +34,8 @@
  * };
  */
 
-/* 
- * We'll define a static tasklet struct here. We'll init it in the IRQ top-half each time 
+/*
+ * We'll define a static tasklet struct here. We'll init it in the IRQ top-half each time
  * or during module/device init. We'll store the device pointer in ->data.
  */
 static struct tasklet_struct eo_as_tasklet;
@@ -49,42 +50,46 @@ static void eo_as_irq_bottom_half(unsigned long data)
     u32 regValue;
     u32 interruptFifoValue;
     u16 descriptor, channel;
+    u64 event_fd;
+    struct eventfd_ctx *event_ctx;
 
     pr_info("lin_isr: bottom_half started\n");
 
-    /* Acquire spinlock if modifying shared data in dev */
     spin_lock(&dev->lock);
 
-    do {
-        /* Read interrupt data from HAL */
+    do
+    {
         regValue = hal_read_interrupt_data(&dev->hal);
 
-        /* Example decoding high/low 16 bits: 
-         * high -> descriptor, low -> channel
-         */
         descriptor = (u16)((regValue & 0xFFFF0000) >> 16);
-        channel    = (u16)(regValue & 0x0000FFFF);
+        channel = (u16)(regValue & 0x0000FFFF);
 
         pr_info("lin_isr: channel=%u, descriptor=%u, regValue=0x%x\n",
-                 channel, descriptor, regValue);
+                channel, descriptor, regValue);
 
-        /* If needed, handle completion events, e.g. 
-         * if (channel < dev->dma_chan_count && descriptor < dev->dma_desc_count) {
-         *     complete(&dev->dma_done[channel][descriptor]);
-         * }
-         */
+        if (channel < MAX_NUM_CHANNELS && descriptor < MAX_NUM_DESCRIPTORS)
+        {
+            event_fd = dev->event_data.chans[channel].events[descriptor].event_handle;
+            event_ctx = dev->event_data.chans[channel].events[descriptor].event_ctx;
 
-        /* Read interrupt FIFO to see if more interrupts remain */
+            if (event_fd > 0 && event_ctx)
+            {
+                eventfd_signal(event_ctx, 1);
+            }
+            else
+            {
+                pr_err("Failed to get eventfd or event_context for channel=%u, descriptor=%u\n", channel, descriptor);
+            }
+        }
+
         interruptFifoValue = hal_mmio_bar_read32(
             &dev->hal, 0,
-            hal_transform_fpga_address(DEVICE_GLOBAL_INTERRUPT_FPGA_STATUS)
-        );
+            hal_transform_fpga_address(DEVICE_GLOBAL_INTERRUPT_FPGA_STATUS));
 
         pr_info("lin_isr: interruptFifoValue=%u after reading regValue\n", interruptFifoValue);
 
     } while (interruptFifoValue != 0);
 
-    /* Acknowledge in hardware */
     hal_global_interrupt_ack(&dev->hal);
 
     spin_unlock(&dev->lock);
@@ -93,7 +98,7 @@ static void eo_as_irq_bottom_half(unsigned long data)
 }
 
 /*
- * The top-half IRQ handler (replaces EvtISR). 
+ * The top-half IRQ handler (replaces EvtISR).
  */
 irqreturn_t eo_as_irq_handler(int irq, void *dev_id)
 {
@@ -106,13 +111,14 @@ irqreturn_t eo_as_irq_handler(int irq, void *dev_id)
         return IRQ_NONE;
     pr_info("lin_isr: check if is  our interrupt\n");
     /* Check if it belongs to our device */
-    if (hal_is_our_interrupt(&dev->hal) != HAL_SUCCESS) {
+    if (hal_is_our_interrupt(&dev->hal) != HAL_SUCCESS)
+    {
         pr_info("lin_isr: not our interrupt\n");
         return IRQ_NONE;
     }
     pr_info("lin_isr: is our interrupt\n");
-    /* 
-     * We'll init the tasklet each time or do it once at driver init. 
+    /*
+     * We'll init the tasklet each time or do it once at driver init.
      * Here we do it each time for demonstration.
      *
      * tasklet_init(struct tasklet_struct *t, void (*func)(unsigned long), unsigned long data);
@@ -141,4 +147,3 @@ void eo_as_interrupt_disable(struct eo_as_device *dev)
     hal_interrupt_disable(&dev->hal);
     dev->device_on = false;
 }
-

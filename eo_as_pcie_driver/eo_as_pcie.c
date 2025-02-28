@@ -26,6 +26,7 @@
 #include "eo_as_dma.h"      /*DMA function definition*/
 #include "hal_hwlayer.h" /* Suppose you implement your HAL read/write calls here */
 #include "lin_isr.h"
+#include <linux/eventfd.h>
 
 /* Example PCI device IDs (Xilinx vendor 0x10EE, device 0x9011) */
 #define EO_AS_VENDOR_ID  0x10EE
@@ -369,6 +370,26 @@ static int eo_as_dev_open(struct inode *inode, struct file *filp)
  */
 static int eo_as_dev_release(struct inode *inode, struct file *filp)
 {
+    struct eo_as_device *eadev;
+    eadev = container_of(inode->i_cdev, struct eo_as_device, cdev);
+
+    int channel;
+    int descriptor;
+    struct eventfd_ctx *event_ctx;
+
+    for (channel = 0; channel < MAX_NUM_CHANNELS; channel++)
+    {
+        for (descriptor = 0; descriptor < MAX_NUM_DESCRIPTORS; descriptor++)
+        {
+            event_ctx = eadev->event_data.chans[channel].events[descriptor].event_ctx;
+            if(event_ctx)
+            {
+                eventfd_ctx_put(event_ctx);
+                eadev->event_data.chans[channel].events[descriptor].event_ctx = NULL;
+            }
+        }
+    }
+
     pr_info("eo_as_fpga_driver: release\n");
     return 0;
 }
