@@ -164,7 +164,7 @@ void tcp_command_server::stop()
             for (size_t d = 0; d < start_dma_configuration_.start_dma_channels[i + LOCAL_RX_STREAMING_START_CHANNEL].dma_descriptors_count; ++d)
             {
                 int event_fd = event_data_.chans[i].events[d].event_handle;
-                if(event_fd != -1)
+                if (event_fd != -1)
                     close(event_fd);
 
                 if (local_rx_worker_threads_[i][d].joinable())
@@ -187,6 +187,8 @@ void tcp_command_server::stop()
             }
         }
     }
+
+    driver_interface_.clear_mmap(va_mmap_);
     driver_interface_.start_stop_DMA_global(false, true);
     driver_interface_.start_stop_DMA_global(false, false);
 }
@@ -459,7 +461,7 @@ void tcp_command_server::handle_sampler_start_dma_configuration(int client_socke
             return;
         }
     }
-    driver_interface_.start_DMA_configure(start_dma_configuration_, memory_data_);
+    driver_interface_.start_DMA_configure(start_dma_configuration_, memory_data_, va_mmap_);
 
     sampler_system_general_res command_response = {};
     command_response.opcode = SAMPLER_SYSTEM_START_DMA_CONFIGURATION_RES;
@@ -548,7 +550,9 @@ void tcp_command_server::handle_sampler_start_local_streaming(int client_socket,
             {
                 local_rx_worker_threads_[local_channel_idx][descriptor_idx] = std::thread([this, test_id, local_channel_idx, dma_channel_idx, descriptor_idx, event_fd]()
                                                                                           {
-                    uint64_t virtual_address = memory_data_.chans[dma_channel_idx].descs[descriptor_idx].buf_va;
+                    uint64_t index = (dma_channel_idx * MAX_NUM_DESCRIPTORS) + descriptor_idx;
+                    uint8_t *va_mmap_b8 = (uint8_t *)va_mmap_;
+                    uint64_t virtual_address = reinterpret_cast<uint64_t>(va_mmap_b8 + (DESCRIPTOR_BUF_SIZE * index));
                     uint64_t ph_address = memory_data_.chans[dma_channel_idx].descs[descriptor_idx].buf_pa;
                     uint32_t last_seq_id = 0;
 
@@ -569,16 +573,13 @@ void tcp_command_server::handle_sampler_start_local_streaming(int client_socket,
 
                             char* data_buffer = reinterpret_cast<char*>(virtual_address);
 
-                            std::cout << "virtual_address " << std::hex << virtual_address << " eventfd " << event_fd << std::endl;
+                            std::cout << "virtual_address " << virtual_address << " eventfd " << event_fd << std::endl;
                             std::cout << "channel " << local_channel_idx << " descriptor " << descriptor_idx << std::endl;
 
-                            // Placeholder for actual DMA data size retrieval
                             size_t data_size = 0;
                             pmessage_header header = reinterpret_cast<pmessage_header>(virtual_address);
-
-                            std::cout << "header->prefix1 " << header->prefix1  << std::endl;
     
-                            /*if (header->prefix1 == 0xaaaaaaaa) {
+                            if (header->prefix1 == 0xaaaaaaaa) {
                                 std::cout << "Local: DMA event signaled for channel " << dma_channel_idx 
                                             << ", descriptor " << descriptor_idx 
                                             << ", header->msg_id = " << header->msg_id 
@@ -591,20 +592,18 @@ void tcp_command_server::handle_sampler_start_local_streaming(int client_socket,
                                 last_seq_id = header->msg_id;
                                 data_size = static_cast<size_t>(header->size);
     
-                                // Implement memcpy logic for tests
                                 if (dma_channel_idx == 8 && test_id == SAMPLER_TEST_TX_CP_CH_8_TO_CH_12) {
                                     uint64_t virtual_address_tx = memory_data_.chans[LOCAL_TX_STREAMING_START_CHANNEL].descs[descriptor_idx].buf_va;
                                     char* data_buffer_dest = reinterpret_cast<char*>(virtual_address_tx);
                                     memcpy(data_buffer_dest, data_buffer, data_size);
                                 }
-                                // Add other test cases similarly...
     
                                 if (header->is_counter_mode == 1) {
                                     int offset = 0x140;
                                     bool result = verify_data_integrity(data_buffer, data_size, offset);
                                     std::cout << "Data integrity check " << (result ? "passed" : "failed") << std::endl;
                                 }
-                            }*/
+                            }
                         }
 
                         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -621,7 +620,9 @@ void tcp_command_server::handle_sampler_start_local_streaming(int client_socket,
                 uint32_t tx_idx = local_channel_idx - MAX_LOCAL_STREAMING_RX_CHANNELS;
                 local_tx_worker_threads_[tx_idx][descriptor_idx] = std::thread([this, tx_idx, dma_channel_idx, descriptor_idx, event_fd]()
                                                                                {
-                    uint64_t virtual_address = memory_data_.chans[dma_channel_idx].descs[descriptor_idx].buf_va;
+                    uint64_t index = (dma_channel_idx * MAX_NUM_DESCRIPTORS) + descriptor_idx;
+                    uint8_t *va_mmap_b8 = (uint8_t *)va_mmap_;
+                    uint64_t virtual_address = reinterpret_cast<uint64_t>(va_mmap_b8 + (DESCRIPTOR_BUF_SIZE * index));
 
                     struct pollfd pfd;
                     pfd.fd = event_fd;
@@ -956,8 +957,6 @@ void tcp_command_server::initialize_dma(const std::vector<register_data> &regist
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    std::cout << "dma count " << dma_param_.dma_chan_count << std::endl;
-
     start_dma_configuration_.dma_channels_count = std::min(dma_param_.dma_chan_count, static_cast<uint32_t>(MAX_NUM_CHANNELS));
     start_dma_configuration_.start_cycle = 1;
 
@@ -977,7 +976,7 @@ void tcp_command_server::initialize_dma(const std::vector<register_data> &regist
         for (uint32_t descriptor = 0; descriptor < MAX_NUM_DESCRIPTORS; descriptor++)
         {
             start_dma_configuration_.start_dma_channels[channel].start_dma_descriptors[descriptor].dma_descriptor_buffer_size =
-                std::min(dma_param_.dma_buf_size, static_cast<uint32_t>(DESCRIPTOR_BUFFER_SIZE));
+                std::min(dma_param_.dma_buf_size, static_cast<uint32_t>(DESCRIPTOR_BUF_SIZE));
             start_dma_configuration_.start_dma_channels[channel].start_dma_descriptors[descriptor].is_descriptor_interrupt_enable = 1;
         }
     }

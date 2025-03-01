@@ -23,6 +23,7 @@
 
 #include <linux/device.h>
 #include "eo_as_device.h"
+#include "public.h"
 
 /**
  * @brief Allocates DMA-coherent buffers for each descriptor in every DMA channel.
@@ -31,11 +32,11 @@
  * memory buffer of size DESCRIPTOR_BUF_SIZE for each descriptor. If an allocation fails, the function
  * frees all previously allocated buffers and returns an error code.
  *
- * @param ctx Pointer to the DMA device context.
+ * @param eadev Pointer to the device context for our FPGA device.
  *
  * @return 0 on success, or -ENOMEM if any allocation fails.
  */
-int eo_as_allocate_dma_buffers(struct dma_device_context *ctx);
+int eo_as_allocate_dma_buffers(struct eo_as_device *eadev);
 
 /**
  * @brief Frees all DMA-coherent buffers allocated for each descriptor.
@@ -43,8 +44,8 @@ int eo_as_allocate_dma_buffers(struct dma_device_context *ctx);
  * This function iterates over each DMA channel and descriptor, freeing any allocated DMA-coherent
  * buffer (allocated via eo_as_allocate_dma_buffers()) and resets the buffer pointer to NULL.
  *
- * @param ctx Pointer to the DMA device context.
+ * @param eadev Pointer to the device context for our FPGA device.
  */
-void eo_as_free_dma_buffers(struct dma_device_context *ctx);
+void eo_as_free_dma_buffers(struct eo_as_device *eadev);
 
 #endif /* EO_AS_DMA_H */

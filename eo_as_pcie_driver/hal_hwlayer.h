@@ -11,7 +11,7 @@
 #ifndef _HAL_HWLAYER_H_
 #define _HAL_HWLAYER_H_
 
-#include <linux/types.h>  /* for u64 */
+#include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
@@ -28,38 +28,37 @@
 #define DMA_REG_OFFSET    0x100
 
 /**
- * @struct hal_interrupt_data
- * @brief Stores interrupt-related data in Linux style.
+ * @brief Structure for hardware interrupt data.
+ *
+ * Contains information about the interrupt, including device ID, IRQ line, and vector.
  */
 struct hal_interrupt_data {
-    void   *dev_id;      /* Pointer back to device context */
+    void   *dev_id;
     unsigned int irq_line;
     unsigned int vector;
 };
 
 /**
- * @struct hal_context
- * @brief HAL context for the device.
+ * @brief Structure for hardware abstraction layer (HAL) context.
+ *
+ * Holds the parent context, memory-mapped BARs, interrupt data, and synchronization lock.
  */
 struct hal_context {
-    /* Points to parent device (e.g., struct pci_dev or your driver’s context). */
     void *parent_context;
 
-    /* Memory-mapped I/O regions. */
     void __iomem *bar[DRV_MAX_NUM_BARS];
     size_t        bar_length[DRV_MAX_NUM_BARS];
     size_t        num_bars;
 
-    /* Interrupt information. */
     struct hal_interrupt_data intr_data;
 
-    /* Spinlock for protecting shared data, if needed. */
     spinlock_t dma_data_lock;
 };
 
 /**
- * @enum hal_status
- * @brief Status codes returned by HAL functions.
+ * @brief Enumeration for HAL operation status codes.
+ *
+ * Defines possible return values for HAL functions indicating success or various errors.
  */
 enum hal_status {
     HAL_SUCCESS = 0,
@@ -69,35 +68,79 @@ enum hal_status {
     HAL_PCIE_ERROR,
 };
 
-/* Function declarations for read/write registers */
+/**
+ * @brief Writes a 32-bit value to a memory-mapped BAR register.
+ *
+ * @param hctx Pointer to the HAL context.
+ * @param bar Index of the BAR to write to.
+ * @param offset Offset within the BAR.
+ * @param value 32-bit value to write.
+ */
 void hal_mmio_bar_write32(struct hal_context *hctx, u8 bar, u64 offset, u32 value);
+
+/**
+ * @brief Reads a 32-bit value from a memory-mapped BAR register.
+ *
+ * @param hctx Pointer to the HAL context.
+ * @param bar Index of the BAR to read from.
+ * @param offset Offset within the BAR.
+ * @return The 32-bit value read from the register.
+ */
 u32  hal_mmio_bar_read32(struct hal_context *hctx, u8 bar, u64 offset);
 
-/* Interrupt-related functions */
+/**
+ * @brief Disables interrupts for the device.
+ *
+ * @param hctx Pointer to the HAL context.
+ */
 void hal_interrupt_disable(struct hal_context *hctx);
+
+/**
+ * @brief Enables interrupts for the device.
+ *
+ * @param hctx Pointer to the HAL context.
+ */
 void hal_interrupt_enable(struct hal_context *hctx);
+
+/**
+ * @brief Checks if an interrupt belongs to this device.
+ *
+ * @param hctx Pointer to the HAL context.
+ * @return HAL status indicating whether the interrupt is ours.
+ */
 enum hal_status hal_is_our_interrupt(struct hal_context *hctx);
+
+/**
+ * @brief Reads interrupt data from the device.
+ *
+ * @param hctx Pointer to the HAL context.
+ * @return 32-bit interrupt data value.
+ */
 u32 hal_read_interrupt_data(struct hal_context *hctx);
+
+/**
+ * @brief Checks if an interrupt is related to a specific DMA index.
+ *
+ * @param hctx Pointer to the HAL context.
+ * @param dma_index Index of the DMA channel to check.
+ * @return HAL status indicating whether the interrupt is DMA-related.
+ */
 enum hal_status hal_is_dma_interrupt(struct hal_context *hctx, u32 dma_index);
+
+/**
+ * @brief Acknowledges a global interrupt.
+ *
+ * @param hctx Pointer to the HAL context.
+ */
 void hal_global_interrupt_ack(struct hal_context *hctx);
 
-
 /**
- * @brief Transforms the provided FPGA address by left shifting by 2 (multiply by 4).
+ * @brief Aligns an offset to a multiple of 4.
  *
- * @param address The original FPGA address.
- * @return The transformed FPGA address.
- */
-static inline u64 hal_transform_fpga_address(u64 address)
-{
-	return address << 2;
-}
-
-/**
- * @brief Aligns the provided offset to the nearest multiple of 4.
+ * Adjusts the offset to the next multiple of 4 if it is not already aligned.
  *
- * @param offset The original offset value.
- * @return The aligned offset value.
+ * @param offset The offset to align.
+ * @return The aligned offset.
  */
 static inline u64 hal_align_to_multiple_of4(u64 offset)
 {
@@ -107,10 +150,12 @@ static inline u64 hal_align_to_multiple_of4(u64 offset)
 }
 
 /**
- * @brief Reads a 32-bit value from a specified register in memory.
+ * @brief Reads a 32-bit register value from a memory-mapped base address.
  *
- * @param base  Base address of the register set (must be valid).
- * @param offset Offset (in bytes) within that base.
+ * Aligns the offset to a multiple of 4 before reading.
+ *
+ * @param base Base address of the memory-mapped region.
+ * @param offset Offset within the base address.
  * @return The 32-bit value read from the register.
  */
 static inline u32 hal_read_register(void __iomem *base, u64 offset)
@@ -120,15 +165,18 @@ static inline u32 hal_read_register(void __iomem *base, u64 offset)
 }
 
 /**
- * @brief Writes a 32-bit value to a specified register in memory.
+ * @brief Writes a 32-bit value to a register at a memory-mapped base address.
  *
- * @param base  Base address of the register set.
- * @param offset Offset (in bytes) within that base.
- * @param value The 32-bit value to write.
+ * Aligns the offset to a multiple of 4 before writing.
+ *
+ * @param base Base address of the memory-mapped region.
+ * @param offset Offset within the base address.
+ * @param value 32-bit value to write.
  */
 static inline void hal_write_register(void __iomem *base, u64 offset, u32 value)
 {
 	u64 aligned = hal_align_to_multiple_of4(offset);
 	iowrite32(value, (void __iomem *)((u8 __iomem *)base + aligned));
 }
+
 #endif /* _HAL_HWLAYER_H_ */

@@ -6,10 +6,9 @@
  * to Linux kernel style.
  */
 
-#include <linux/io.h>      // for iowrite32, ioread32
-#include <linux/printk.h>  // for pr_info, etc.
+#include <linux/io.h>
+#include <linux/printk.h>
 #include "hal_hwlayer.h"
-
 
 
 u32 hal_mmio_bar_read32(struct hal_context *hctx, u8 bar, u64 offset)
@@ -20,7 +19,6 @@ u32 hal_mmio_bar_read32(struct hal_context *hctx, u8 bar, u64 offset)
         bar, offset);
         return 0xFFFFFFFF;
     }
-      
 
     if (offset < hctx->bar_length[bar] && hctx->bar[bar]) {
         data = ioread32((void __iomem *)(hctx->bar[bar] + offset));
@@ -45,14 +43,12 @@ void hal_mmio_bar_write32(struct hal_context *hctx, u8 bar, u64 offset, u32 valu
 
 void hal_interrupt_disable(struct hal_context *hctx)
 {
-    /* Example: Write 0 to a global interrupt enable register at offset 0x200 */
     pr_info("hal_hwlayer: Disabling interrupts\n");
     hal_mmio_bar_write32(hctx, BAR0, 0xc, 0x0);
 }
 
 void hal_interrupt_enable(struct hal_context *hctx)
 {
-    /* Example: Write 1 to the same global interrupt enable register. */
     pr_info("hal_hwlayer: Enabling interrupts\n");
     hal_mmio_bar_write32(hctx, BAR0, 0xc, 0x1);
 }
@@ -62,7 +58,7 @@ enum hal_status hal_is_our_interrupt(struct hal_context *hctx)
     u32 reg_val;
     if (!hctx) 
         return HAL_FAILED;
-    /* Example: read a global interrupt status reg at offset 0x104 */
+
     reg_val = hal_mmio_bar_read32(hctx, BAR0, 0x14);
     pr_info("hal_hwlayer: Checking global interrupt status=0x%x\n", reg_val);
 
@@ -75,7 +71,7 @@ u32 hal_read_interrupt_data(struct hal_context *hctx)
 {
     if (!hctx)
         return 0xFFFFFFFF;
-    /* e.g., read an interrupt data reg at offset 0x108 */
+
     return hal_mmio_bar_read32(hctx, BAR0, 0x18);
 }
 
@@ -83,13 +79,12 @@ enum hal_status hal_is_dma_interrupt(struct hal_context *hctx, u32 dma_index)
 {
     if (!hctx || dma_index > MAX_DMA_COUNT_16)
         return HAL_FAILED;
-    /* Example logic. If needed, read a DMA interrupt status reg. */
+
     return HAL_SUCCESS;
 }
 
 void hal_global_interrupt_ack(struct hal_context *hctx)
 {
-    /* e.g., write 1 to ack register */
     pr_info("hal_hwlayer: Global interrupt Ack\n");
     hal_mmio_bar_write32(hctx, BAR0, 0x10, 0x1);
 }

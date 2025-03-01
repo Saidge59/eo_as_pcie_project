@@ -2,30 +2,13 @@
 #ifndef EO_AS_DEVICE_H
 #define EO_AS_DEVICE_H
 
-#include <linux/types.h>      /* For basic types */
-#include <linux/spinlock.h>   /* If you have spin locks */
-#include <linux/atomic.h>     /* If you have atomic ops, etc. */
+#include <linux/types.h>
+#include <linux/spinlock.h>
+#include <linux/atomic.h>
 #include <linux/cdev.h>
 #include <linux/spinlock.h>
-/* If your device struct references the HAL context or other custom structs: */
-#include "hal_hwlayer.h"     /* or wherever 'hal_context' is declared */
-#include "public.h"     /* if you store eo_as_dma_params, etc. inside struct eo_as_device */
-/*----------------------------------------------------------------------------
- * Macros
- *---------------------------------------------------------------------------*/
-
-
-
-/**
- * @brief Size of each DMA descriptor buffer in bytes.
- *
- * Each descriptor is allocated 64 MB.
- */
-#define DESCRIPTOR_BUF_SIZE (64UL * 1024 * 1024)  /* 64 MB per descriptor */
-
-/*----------------------------------------------------------------------------
- * Structures
- *---------------------------------------------------------------------------*/
+#include "hal_hwlayer.h"
+#include "public.h"
 
 /**
  * @brief DMA descriptor structure.
@@ -74,7 +57,6 @@ struct eo_as_device {
     struct eo_as_event_data event_data;  /* if you store event data here */
     struct dma_device_context *dma_ctx;   /*This context contains the device pointer and an array of DMA channels  */
 
-    void *dma_info;         /* info about pa and va*/
     bool device_on;        /* example */
   
 

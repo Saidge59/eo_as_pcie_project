@@ -2,6 +2,7 @@
 #define LIN_ISR_H
 
 #include <linux/interrupt.h>
+#include "public.h"
 
 /* Forward declaration of your device struct. Adjust name if needed. */
 struct eo_as_device;

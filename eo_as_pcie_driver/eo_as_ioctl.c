@@ -15,15 +15,6 @@
 #include "eo_as_device.h"
 #include <linux/eventfd.h>
 
-/**
- * @brief The single IOCTL handling function, replacing the Windows EvtIoDeviceControl code.
- *
- * @param filp The file struct (from the open).
- * @param cmd  The ioctl command (e.g., EO_AS_IOC_SET_DMA_REG).
- * @param arg  The user-space pointer argument.
- *
- * @return 0 on success, negative error code on failure.
- */
 long eo_as_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
     struct eo_as_device *dev = filp->private_data;
@@ -92,6 +83,8 @@ long eo_as_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
     case EO_AS_IOC_EVENT_HANDLE_SET:
     {
+        uint32_t channel;
+        uint32_t descriptor;
         int event_handles[MAX_NUM_CHANNELS * MAX_NUM_DESCRIPTORS];
 
         if (copy_from_user(event_handles, (void __user *)arg, sizeof(event_handles)))
@@ -99,9 +92,6 @@ long eo_as_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             ret = -EFAULT;
             break;
         }
-        
-        uint32_t channel;
-        uint32_t descriptor;
 
         for (channel = 0; channel < MAX_NUM_CHANNELS; ++channel)
         {
@@ -110,9 +100,6 @@ long eo_as_dev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
                 int index = channel * MAX_NUM_DESCRIPTORS + descriptor;
                 dev->event_data.chans[channel].events[descriptor].event_handle = event_handles[index];
                 dev->event_data.chans[channel].events[descriptor].event_ctx = eventfd_ctx_fdget(event_handles[index]);
-                pr_info("event_handle: %d, event_ctx: %p\n", 
-                    dev->event_data.chans[channel].events[descriptor].event_handle,
-                    dev->event_data.chans[channel].events[descriptor].event_ctx);
             }
         }
         break;

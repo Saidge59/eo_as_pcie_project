@@ -18,105 +18,126 @@
 
 #define DRV_VER 0x102
 
-///< Maximum number of channels and descriptors
-#define MAX_NUM_CHANNELS 8                            ///< Maximum number of DMA channels
-#define MAX_NUM_CHANNELS_WITH_HEADER 8                ///< Maximum number of DMA channels for project with read size in header
-#define MAX_NUM_DESCRIPTORS 6                         ///< Maximum number of DMA descriptors per channel
-#define MAX_NUM_EVENTS_PER_DESCRIPTORS 3              ///< Maximum number of events per descriptor
-#define DESCRIPTOR_BUFFER_SIZE (32ULL * 1024 * 1024) ///< Descriptor buffer size set to 1 GB
+#define MAX_NUM_CHANNELS 8                        ///< Maximum number of DMA channels
+#define MAX_NUM_CHANNELS_WITH_HEADER 8            ///< Maximum number of DMA channels for project with read size in header
+#define MAX_NUM_DESCRIPTORS 6                     ///< Maximum number of DMA descriptors per channel
+#define MAX_NUM_EVENTS_PER_DESCRIPTORS 3          ///< Maximum number of events per descriptor
+#define DESCRIPTOR_BUF_SIZE (32ULL * 1024 * 1024) ///< Descriptor buffer size set to 1 GB
+#define TOTAL_SIZE (MAX_NUM_CHANNELS * MAX_NUM_DESCRIPTORS * DESCRIPTOR_BUF_SIZE)
 
-///< COMMON MACROS
-///< Alignment for X is power of 2
 #define ALIGN_X(value, x) (((value) + ((x) - 1)) & -(x)) ///< Align 'value' to the nearest multiple of 'x'
 #define ALIGN_64(value) ALIGN_X((value), 64)             ///< Align 'value' to the nearest multiple of 64
 
 #define TIMEOUT_MS_IOCTL 2000 ///< IOCTL call timeout in ms
 
-#define DEVICE_GLOBAL_DRV_VER 0xb                     ///< Global enable Interrupt register
-#define DEVICE_GLOBAL_INTERRUPT_FPGA_ENABLE 0x0003    ///< Global enable Interrupt register
-#define DEVICE_GLOBAL_INTERRUPT_FPGA_STATUS 0x0005    ///< Global status Interrupt register (FIFO occupancy)
-#define DEVICE_GLOBAL_INTERRUPT_FPGA_ACK 0x0004       ///< Global status Interrupt register
-#define DEVICE_GLOBAL_INTERRUPT_FPGA_DATA 0x0006      ///< Global Interrupt register data (read before ACK)
-#define DEVICE_GLOBAL_DMA_ENABLE_FPGA_DATA 0x0008     ///< Global DMA enable register data
-#define DEVICE_GLOBAL_DMA_MAX_DMA_CHANELS_DATA 0x0009 ///< Global DMA max channels register data
-#define DEVICE_GLOBAL_DMA_PPS_TRIGER 0x0017           ///< Global PPS triger bit 0: Enable, bit 1: Rising/Fall
-
-///< DMA control register address
-#define DEVICE_GLOBAL_DMA_REG_CONTROL 0x0100 ///< Register address for DMA control operations.
-
-///< DMA descriptors number register address
-#define DEVICE_GLOBAL_DMA_REG_DESCRIPTORS_NUMBER 0x0101 ///< Register address for querying the number of DMA descriptors.
-
-///< DMA get descriptor index register address
+#define DEVICE_GLOBAL_DRV_VER 0xb                         ///< Global enable Interrupt register
+#define DEVICE_GLOBAL_INTERRUPT_FPGA_ENABLE 0x0003        ///< Global enable Interrupt register
+#define DEVICE_GLOBAL_INTERRUPT_FPGA_STATUS 0x0005        ///< Global status Interrupt register (FIFO occupancy)
+#define DEVICE_GLOBAL_INTERRUPT_FPGA_ACK 0x0004           ///< Global status Interrupt register
+#define DEVICE_GLOBAL_INTERRUPT_FPGA_DATA 0x0006          ///< Global Interrupt register data (read before ACK)
+#define DEVICE_GLOBAL_DMA_ENABLE_FPGA_DATA 0x0008         ///< Global DMA enable register data
+#define DEVICE_GLOBAL_DMA_MAX_DMA_CHANELS_DATA 0x0009     ///< Global DMA max channels register data
+#define DEVICE_GLOBAL_DMA_PPS_TRIGER 0x0017               ///< Global PPS triger bit 0: Enable, bit 1: Rising/Fall
+#define DEVICE_GLOBAL_DMA_REG_CONTROL 0x0100              ///< Register address for DMA control operations.
+#define DEVICE_GLOBAL_DMA_REG_DESCRIPTORS_NUMBER 0x0101   ///< Register address for querying the number of DMA descriptors.
 #define DEVICE_GLOBAL_DMA_REG_GET_DESCRIPTOR_INDEX 0x0102 ///< Register address for obtaining the current descriptor index.
+#define DEVICE_GLOBAL_DMA_REG_DESCRIPTORS_TABLE 0x0800    ///< Base address of the DMA descriptors table.
 
-///< DMA descriptors table base address
-#define DEVICE_GLOBAL_DMA_REG_DESCRIPTORS_TABLE 0x0800 ///< Base address of the DMA descriptors table.
-
-///< Function to transform FPGA address
+/**
+ * @brief Transforms an FPGA address by shifting it left.
+ *
+ * Multiplies the input address by 4 by performing a left shift of 2 bits.
+ *
+ * @param address The address to transform.
+ * @return The transformed address (shifted left by 2).
+ */
 static inline uint64_t trans_form_fpga_address(uint64_t address)
 {
-    return address << 2; ///< Left shift by 2 positions to multiply by 4
+    return address << 2;
 }
 
-/*
- * Convert old Windows IOCTL_* definitions to Linux _IO, _IOR, _IOW, _IOWR
- * and rename fields to Linux style (e.g. "dma_desc_count").
+/**
+ * @brief Structure for FPGA register access parameters.
+ *
+ * Contains the register offset, value, and BAR index for read/write operations.
  */
-
-/* Registry-like operation for reading/writing a register */
 struct eo_as_registry_params
 {
-    uint64_t address; /* register offset */
-    uint32_t value;   /* read/write value */
-    uint32_t bar;      /* which BAR? */
+    uint64_t address;
+    uint32_t value;
+    uint32_t bar;
 } __attribute__((packed));
 
-/*
- * Replacing GLOBAL_DATA_DMA_PARAMETERS with Linux naming
+/**
+ * @brief Structure for DMA-related parameters.
+ *
+ * Defines the maximum counts and sizes for DMA descriptors and channels.
  */
 struct eo_as_dma_params
 {
-    uint32_t dma_desc_count; /* was DmaDescriptorsMaxCount */
-    uint32_t dma_buf_size;   /* was DmaDescriptorMaxBufferSize */
-    uint32_t dma_chan_count; /* was DmaChannelsMaxCount */
+    uint32_t dma_desc_count;
+    uint32_t dma_buf_size;
+    uint32_t dma_chan_count;
 } __attribute__((packed));
 
+/**
+ * @brief Structure for a single DMA descriptor.
+ *
+ * Holds the virtual and physical addresses of a DMA buffer.
+ */
 struct eo_as_dma_desc
 {
     uint64_t buf_va;
     uint64_t buf_pa;
 } __attribute__((packed));
 
+/**
+ * @brief Structure for a DMA channel.
+ *
+ * Contains an array of DMA descriptors for a single channel.
+ */
 struct eo_as_dma_channel
 {
     struct eo_as_dma_desc descs[MAX_NUM_DESCRIPTORS];
 } __attribute__((packed));
 
+/**
+ * @brief Structure for memory mapping of DMA channels.
+ *
+ * Contains an array of DMA channels for memory mapping.
+ */
 struct eo_as_mem_map
 {
     struct eo_as_dma_channel chans[MAX_NUM_CHANNELS];
 } __attribute__((packed));
 
-// GLOBAL_MEM_MAP_DATA_AND_EVENT_HANDLES
 /**
- * @brief Configuration for starting a DMA descriptor.
+ * @brief Structure for configuring a single DMA descriptor.
+ *
+ * Specifies the buffer size and interrupt enable flag for a DMA descriptor.
  */
 struct start_dma_descriptors_configuration
 {
-    uint32_t dma_descriptor_buffer_size;     ///< Size of the DMA descriptor buffer
-    uint32_t is_descriptor_interrupt_enable; ///< Flag to enable interrupt for the descriptor
+    uint32_t dma_descriptor_buffer_size;
+    uint32_t is_descriptor_interrupt_enable;
 } __attribute__((packed));
 
 /**
- * @brief Configuration for starting a DMA channel.
+ * @brief Structure for configuring a DMA channel.
+ *
+ * Defines the number of descriptors and their configurations for a channel.
  */
 struct start_dma_configuration
 {
-    uint32_t dma_descriptors_count;                                                 ///< Number of DMA descriptors in the channel
-    struct start_dma_descriptors_configuration start_dma_descriptors[MAX_NUM_DESCRIPTORS]; ///< Array of DMA descriptor configurations
+    uint32_t dma_descriptors_count;
+    struct start_dma_descriptors_configuration start_dma_descriptors[MAX_NUM_DESCRIPTORS];
 } __attribute__((packed));
 
+/**
+ * @brief Structure for global DMA configuration.
+ *
+ * Specifies the number of channels, start cycle, and per-channel configurations.
+ */
 struct global_start_dma_configuration
 {
     uint32_t dma_channels_count;
@@ -124,9 +145,10 @@ struct global_start_dma_configuration
     struct start_dma_configuration start_dma_channels[MAX_NUM_CHANNELS];
 } __attribute__((packed));
 
-/*
- * If you previously had event-handle definitions, rename them likewise.
- * In Linux, there's no direct concept of "HANDLE", so you might store a user token:
+/**
+ * @brief Structure for an event descriptor.
+ *
+ * Contains an event handle and associated eventfd context.
  */
 struct eo_as_event_desc
 {
@@ -134,11 +156,21 @@ struct eo_as_event_desc
     struct eventfd_ctx *event_ctx;
 } __attribute__((packed));
 
+/**
+ * @brief Structure for event data of a single channel.
+ *
+ * Holds an array of event descriptors for a channel.
+ */
 struct eo_as_event_chan
 {
     struct eo_as_event_desc events[MAX_NUM_DESCRIPTORS];
 } __attribute__((packed));
 
+/**
+ * @brief Structure for event data across all channels.
+ *
+ * Contains an array of channel-specific event data.
+ */
 struct eo_as_event_data
 {
     struct eo_as_event_chan chans[MAX_NUM_CHANNELS];
