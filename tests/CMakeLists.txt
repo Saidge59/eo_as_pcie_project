@@ -1,24 +1,20 @@
 cmake_minimum_required(VERSION 3.10)
-project(eo_as_test)
+project(eo_as_test LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 
-#add_executable(test_interface test_eo_as_interface.cpp)
-add_executable(test_interface main.cpp)
-
-include_directories(test_interface PRIVATE 
-    ${CMAKE_SOURCE_DIR}/../include
-    ${CMAKE_SOURCE_DIR}/../lib
-    ${CMAKE_SOURCE_DIR}/../src
+add_executable(test_interface
+    ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
 )
 
-add_library(eo_as_interface_lib STATIC 
-    ${CMAKE_SOURCE_DIR}/../lib/eo_as_interface_lib.cpp
-    ${CMAKE_SOURCE_DIR}/../src/config_reader.cpp
-    ${CMAKE_SOURCE_DIR}/../src/tcp_commands_server.cpp
+target_include_directories(test_interface PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
 )
 
-target_link_libraries(test_interface PRIVATE eo_as_interface_lib)
+target_link_libraries(test_interface PRIVATE
+    eo_as_interface_lib
+    eo_as_src
+)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(test_interface PRIVATE -Wall -Wextra -Wpedantic)
