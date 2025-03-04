@@ -466,7 +466,6 @@ private:
     eo_as_mem_map memory_data_;   ///< Memory mapping data
     eo_as_event_data event_data_; ///< Event data
     eo_as_dma_params dma_param_;  ///< DMA parameters
-    void *va_mmap_;
 
     std::array<std::array<std::thread, 8>, MAX_TCP_STREAMING_CHANNELS> tcp_worker_threads_; ///< Worker threads for TCP streaming
     std::array<std::atomic<bool>, MAX_TCP_STREAMING_CHANNELS> tcp_streaming_running_;       ///< TCP streaming running flags

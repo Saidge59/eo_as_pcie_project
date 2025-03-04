@@ -264,6 +264,7 @@ static int eo_as_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent
         ret = -ENOMEM;
         goto err_free_dma_ctx;
     }
+
     ret = eo_as_allocate_dma_buffers(eadev);
     if (ret < 0)
         goto err_free_dma_channels;
@@ -313,6 +314,7 @@ static int eo_as_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent
             (unsigned long long)bar_start1,
             vector);
     return 0;
+
 
 err_class_destroy:
     class_destroy(eadev->class);
@@ -480,12 +482,14 @@ static ssize_t eo_as_dev_write(struct file *filp, const char __user *buf, size_t
 static int eo_as_dev_mmap(struct file *filp, struct vm_area_struct *vma)
 {
     struct eo_as_device *eadev = filp->private_data;
-    unsigned long pfn;
     dma_addr_t dma_handle;
     int channel, descriptor;
     size_t total_size = MAX_NUM_CHANNELS * MAX_NUM_DESCRIPTORS * DESCRIPTOR_BUF_SIZE;
     size_t requested_size = vma->vm_end - vma->vm_start;
     unsigned long offset = 0;
+    void *buffer;
+    struct vm_area_struct tmp_vma;
+    int ret;
 
     if (!eadev)
     {
@@ -503,22 +507,26 @@ static int eo_as_dev_mmap(struct file *filp, struct vm_area_struct *vma)
     for (channel = 0; channel < MAX_NUM_CHANNELS; channel++)
     {
         for (descriptor = 0; descriptor < MAX_NUM_DESCRIPTORS; descriptor++)
-        {
+        {            
             dma_handle = eadev->dma_ctx->channels[channel].descriptors[descriptor].dma_handle;
-            pfn = dma_handle >> PAGE_SHIFT;
+            buffer = eadev->dma_ctx->channels[channel].descriptors[descriptor].buffer;
 
-            if (remap_pfn_range(vma, vma->vm_start + offset, pfn, DESCRIPTOR_BUF_SIZE, vma->vm_page_prot))
-            {
-                pr_err("eo_as_fpga_driver 'mmap': Failed to map channel %d, descriptor %d\n",
-                       channel, descriptor);
-                return -EAGAIN;
+            tmp_vma = *vma;
+            tmp_vma.vm_start = vma->vm_start + offset;
+            tmp_vma.vm_end = tmp_vma.vm_start + DESCRIPTOR_BUF_SIZE;
+
+            ret = dma_mmap_coherent(eadev->dma_ctx->dev, &tmp_vma, buffer, dma_handle, DESCRIPTOR_BUF_SIZE);
+            if (ret) {
+                pr_err("ch %d desc %d: dma_mmap_coherent failed: %d\n", channel, descriptor, ret);
+                eo_as_interrupt_enable(eadev);
+                return ret;
             }
 
             offset += DESCRIPTOR_BUF_SIZE;
         }
     }
 
-    pr_info("Mapped %d channels, %d descriptors successfully, total size=%zu\n",
+    pr_info("eo_as_dev_mmap: Mapped %d channels, %d descriptors successfully, total size=%zu\n",
             MAX_NUM_CHANNELS, MAX_NUM_DESCRIPTORS, total_size);
 
     return 0;

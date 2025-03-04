@@ -34,10 +34,15 @@ public:
 
     /**
      * @brief Clear memory map.
-     *
-     * @param va_mmap Pointer to virtual address.
      */
-    void clear_mmap(void *va_mmap);
+    void clear_mmap();
+
+    /**
+     * @brief Init memory map.
+     * 
+     * @param memory_data  Reference to the memory mapping of DMA channels.
+     */
+    void init_mmap(eo_as_mem_map &memory_data);
 
     /**
      * @brief Sends an IOCTL command to the driver.
@@ -106,12 +111,13 @@ public:
      * @param data Reference to the memory map structure for DMA data.
      * @param va_mmap Pointer to virtual address.
      */
-    void start_DMA_configure(struct global_start_dma_configuration &startDmaConfiguration, struct eo_as_mem_map &data, void *&va_mmap);
+    void start_DMA_configure(struct global_start_dma_configuration &startDmaConfiguration, struct eo_as_mem_map &data);
 
 private:
     int driverHandle_ = -1; ///< File descriptor for the driver.
     int sharedEventHandle_[MAX_NUM_CHANNELS * MAX_NUM_DESCRIPTORS]; ///< Array of shared event handles.
     static std::mutex g_mutex; ///< Mutex for thread-safe operations.
+    void *va_mmap_;
 };
 
 #endif // DRIVER_INTERFACE_H

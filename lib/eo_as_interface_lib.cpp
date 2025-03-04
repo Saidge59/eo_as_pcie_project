@@ -27,12 +27,32 @@ driver_interface::~driver_interface()
     }
 }
 
-void driver_interface::clear_mmap(void *va_mmap)
+void driver_interface::clear_mmap()
 {
-    if (va_mmap)
+    if (va_mmap_)
     {
-        munmap(va_mmap, TOTAL_SIZE);
-        va_mmap = NULL;
+        munmap(va_mmap_, TOTAL_SIZE);
+        va_mmap_ = NULL;
+    }
+}
+
+void driver_interface::init_mmap(eo_as_mem_map &memory_data)
+{
+    va_mmap_ = mmap(NULL, TOTAL_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, driverHandle_, 0);
+    if (va_mmap_ == MAP_FAILED)
+    {
+        std::cerr << "Invalid driver memory" << std::endl;
+        return;
+    }
+
+    for (uint32_t channel = 0; channel < MAX_NUM_CHANNELS; ++channel)
+    {
+        for (uint32_t descriptor = 0; descriptor < MAX_NUM_DESCRIPTORS; ++descriptor)
+        {
+            uint64_t index = (channel * MAX_NUM_DESCRIPTORS) + descriptor;
+            uint8_t *va_mmap_b8 = (uint8_t *)va_mmap_;
+            memory_data.chans[channel].descs[descriptor].buf_va = reinterpret_cast<uint64_t>(va_mmap_b8 + (DESCRIPTOR_BUF_SIZE * index));
+        }
     }
 }
 
@@ -174,19 +194,12 @@ void driver_interface::start_stop_DMA_global(bool isStartDmaGlobal, bool isRx)
     start_stop_DMA_global();
 }
 
-void driver_interface::start_DMA_configure(struct global_start_dma_configuration &startDmaConfiguration, struct eo_as_mem_map &data, void *&va_mmap)
+void driver_interface::start_DMA_configure(struct global_start_dma_configuration &startDmaConfiguration, struct eo_as_mem_map &data)
 {
     std::lock_guard<std::mutex> lock(g_mutex);
 
     auto configuration_start_DMA = [&]()
     {
-        va_mmap = mmap(NULL, TOTAL_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, driverHandle_, 0);
-        if (va_mmap == MAP_FAILED)
-        {
-            std::cerr << "Invalid driver memory" << std::endl;
-            return;
-        }
-
         uint32_t InterruptStatusValue = read_register(0, trans_form_fpga_address(DEVICE_GLOBAL_INTERRUPT_FPGA_STATUS));
         write_register(0, trans_form_fpga_address(DEVICE_GLOBAL_INTERRUPT_FPGA_DATA), 0x00FF);
 
