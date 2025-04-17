@@ -16,7 +16,7 @@
 #include <pthread.h>
 #include <limits.h>
 #include <semaphore.h>
-// #include "tcp_client.h"
+#include "tcp_client.h"
 #include <poll.h>
 
 #define REG_SRV_VER 0x1C
@@ -362,7 +362,6 @@ void tcp_command_server::handle_sampler_dma_system_init(int client_socket, const
               << ", Descriptors Size = " << command->descriptors_size << std::endl;
 }
 
-/*
 void tcp_command_server::handle_sampler_start_tcp_streaming(int client_socket, const std::string &command_data)
 {
     if (command_data.size() < sizeof(sampler_start_tcp_streaming_command))
@@ -443,7 +442,6 @@ void tcp_command_server::handle_sampler_start_tcp_streaming(int client_socket, c
     send_data(command->token_id, response);
     std::cout << "TCP streaming started for Token ID: " << command->token_id << std::endl;
 }
-*/
 
 void tcp_command_server::handle_sampler_start_dma_configuration(int client_socket, const std::string &command_data)
 {
