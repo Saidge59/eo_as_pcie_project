@@ -411,22 +411,32 @@ void tcp_command_server::handle_sampler_start_tcp_streaming(int client_socket, c
                     }
 
                     char* data_buffer = reinterpret_cast<char*>(virtual_address);
-                    size_t data_size = 0;  // Needs actual implementation from driver
-                    if (tcp_client.is_connected()) {
-                        int res = tcp_client.send_data(data_buffer, data_size);
-                        if (res < 0) {
-                            tcp_client.connect();
-                            if (tcp_client.is_connected()) {
-                                res = tcp_client.send_data(data_buffer, data_size);
+
+                    pmessage_header header = reinterpret_cast<pmessage_header>(virtual_address);
+    
+                    if (header->prefix1 == 0xaaaaaaaa) {
+                        std::cout << "TCP: DMA event signaled for channel " << dma_channel_idx 
+                                    << ", descriptor " << descriptor_idx 
+                                    << ", header->msg_id = " << header->msg_id 
+                                    << ", virtualAddress = 0x" << std::hex << virtual_address << std::endl;
+                        
+                        size_t data_size = static_cast<size_t>(header->size);
+                        if (tcp_client.is_connected()) {
+                            int res = tcp_client.send_data(data_buffer, data_size);
+                            if (res < 0) {
+                                tcp_client.connect();
+                                if (tcp_client.is_connected()) {
+                                    res = tcp_client.send_data(data_buffer, data_size);
+                                }
+                            }
+                            if (res < 0) {
+                                std::cerr << "Failed to send data on tcp channel " << tcp_channel_idx << std::endl;
+                            } else {
+                                std::cout << "Data sent successfully on tcp channel " << tcp_channel_idx << std::endl;
                             }
                         }
-                        if (res < 0) {
-                            std::cerr << "Failed to send data on tcp channel " << tcp_channel_idx << std::endl;
-                        } else {
-                            std::cout << "Data sent successfully on tcp channel " << tcp_channel_idx << std::endl;
-                        }
+                        std::this_thread::sleep_for(std::chrono::milliseconds(10));
                     }
-                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 } });
 
             cpu_set_t cpuset;
@@ -1078,7 +1088,11 @@ void tcp_command_server::build_config_from_command(const sampler_start_tcp_strea
     {
         if (command.channels[i])
         {
-            config.server_ips.push_back(std::string(command.ip_addresses[i]));
+            std::string ip = command.ip_addresses[i];
+            ip.erase(std::remove_if(ip.begin(), ip.end(),
+                [](unsigned char c) { return std::isspace(c); }),
+                ip.end());
+            config.server_ips.push_back(ip);
             config.ports.push_back(command.ports[i]);
         }
     }

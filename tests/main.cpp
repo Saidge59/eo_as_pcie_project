@@ -15,10 +15,10 @@ int main() {
         [&](int socket, const std::string &data) {
             server.handle_sampler_dma_system_init(socket, data);
         });
-    /*server.register_callback(SAMPLER_CONFIG_START_TCP_STREAMING_REQ, 
+    server.register_callback(SAMPLER_CONFIG_START_TCP_STREAMING_REQ, 
         [&](int socket, const std::string &data) {
             server.handle_sampler_start_tcp_streaming(socket, data);
-        });*/
+        });
     server.register_callback(SAMPLER_CONFIG_STOP_TCP_STREAMING_REQ, 
         [&](int socket, const std::string &data) {
             server.handle_sampler_stop_tcp_streaming(socket, data);
