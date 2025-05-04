@@ -17,3 +17,5 @@ tests/build/
 *.order
 
 *.mod
+
+*.d

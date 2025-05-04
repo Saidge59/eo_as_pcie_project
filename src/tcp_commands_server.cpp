@@ -413,20 +413,21 @@ void tcp_command_server::handle_sampler_start_tcp_streaming(int client_socket, c
                     char* data_buffer = reinterpret_cast<char*>(virtual_address);
 
                     pmessage_header header = reinterpret_cast<pmessage_header>(virtual_address);
-    
+                    header->size = 2*1024*1024;
                     if (header->prefix1 == 0xaaaaaaaa) {
+                        size_t data_size = static_cast<size_t>(header->size);
                         std::cout << "TCP: DMA event signaled for channel " << dma_channel_idx 
                                     << ", descriptor " << descriptor_idx 
                                     << ", header->msg_id = " << header->msg_id 
+                                     << ", header->size = " << data_size 
                                     << ", virtualAddress = 0x" << std::hex << virtual_address << std::endl;
-                        
-                        size_t data_size = static_cast<size_t>(header->size);
+                        tcp_client.reconnect_client();                       
                         if (tcp_client.is_connected()) {
                             int res = tcp_client.send_data(data_buffer, data_size);
                             if (res < 0) {
                                 tcp_client.connect();
                                 if (tcp_client.is_connected()) {
-                                    res = tcp_client.send_data(data_buffer, data_size);
+                                   res = tcp_client.send_data(data_buffer, data_size);
                                 }
                             }
                             if (res < 0) {

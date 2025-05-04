@@ -1,6 +1,6 @@
-// tcp_client.cpp
 #include "tcp_client.h"
 #include <iostream>
+#include <cstring> // for std::memset
 #include <thread>
 #include <chrono>
 #include <sys/socket.h>
@@ -11,12 +11,14 @@
 #include <fcntl.h>
 #include <errno.h>
 
-static const uint32_t g_socket_send_size = 10485760;
-static const uint32_t g_keepalive_time = 1000;
-static const uint32_t g_keepalive_interval = 1000;
+// Example buffer sizes & keepalive intervals
+static const uint32_t g_socket_send_size   = 10485760; // 10MB send buffer
+static const uint32_t g_keepalive_time     = 1000;     // 1 sec
+static const uint32_t g_keepalive_interval = 1000;     // 1 sec
 
-tcp_client::tcp_client(const std::string& server_ip, int port) 
-    : server_ip_(server_ip), port_(port), socket_(-1) {
+tcp_client::tcp_client(const std::string& server_ip, int port)
+    : server_ip_(server_ip), port_(port), socket_(-1)
+{
 }
 
 tcp_client::~tcp_client() {
@@ -24,73 +26,74 @@ tcp_client::~tcp_client() {
 }
 
 bool tcp_client::connect() {
-    // Close the existing socket if it's valid
+    // Close existing if valid
     if (socket_ != -1) {
         ::close(socket_);
         socket_ = -1;
     }
 
-    // Create a new socket
-    socket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    // Create new socket
+    socket_ = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (socket_ == -1) {
-        std::cerr << "Socket creation failed: " << std::endl;
+        std::cerr << "Socket creation failed, errno=" << errno << std::endl;
         return false;
     }
 
-    // Set up the server address
-    sockaddr_in server_addr = {};
+    // Non-blocking mode for connect
+    int flags = fcntl(socket_, F_GETFL, 0);
+    fcntl(socket_, F_SETFL, flags | O_NONBLOCK);
+    // Set up server address
+    sockaddr_in server_addr;
+    std::memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port_);
+    server_addr.sin_port   = htons(port_);
+
     if (inet_pton(AF_INET, server_ip_.c_str(), &server_addr.sin_addr) <= 0) {
-        std::cerr << "Invalid address: " << std::endl;
+        std::cerr << "Invalid server IP: " << server_ip_ << std::endl;
         ::close(socket_);
         socket_ = -1;
         return false;
     }
 
-    // Set socket to non-blocking for connection attempt
-    int flags = fcntl(socket_, F_GETFL, 0);
-    fcntl(socket_, F_SETFL, flags | O_NONBLOCK);
-
-    // Initiate connection
+    // Attempt connect
     int result = ::connect(socket_, (sockaddr*)&server_addr, sizeof(server_addr));
     if (result == -1 && errno != EINPROGRESS) {
-        std::cerr << "Connection attempt failed immediately: " << std::endl;
+        std::cerr << "Connect failed immediately, errno=" << errno << std::endl;
         ::close(socket_);
         socket_ = -1;
         return false;
     }
 
     if (result == -1) {
-        // Connection attempt in progress, use select to wait with timeout
+        // Wait for connect with select()
         fd_set write_set;
         FD_ZERO(&write_set);
         FD_SET(socket_, &write_set);
 
         struct timeval timeout;
-        timeout.tv_sec = 2;  // 2 seconds timeout
+        timeout.tv_sec  = 2;  // 2s
         timeout.tv_usec = 0;
 
-        result = select(socket_ + 1, NULL, &write_set, NULL, &timeout);
-        if (result <= 0) {
-            std::cerr << "Connection attempt timed out or failed: " << std::endl;
+        int sel_res = select(socket_ + 1, nullptr, &write_set, nullptr, &timeout);
+        if (sel_res <= 0) {
+            std::cerr << "Connect timed out or failed, errno=" << errno << std::endl;
             ::close(socket_);
             socket_ = -1;
             return false;
         }
 
-        // Check if connection was successful
+        // Check if connect was truly successful
         int error = 0;
         socklen_t len = sizeof(error);
         if (getsockopt(socket_, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
-            std::cerr << "Connection failed: " << std::endl;
+            std::cerr << "Connect failed, SO_ERROR=" << error << std::endl;
             ::close(socket_);
             socket_ = -1;
             return false;
         }
     }
 
-    // Set socket back to blocking mode
+    // Back to blocking
     fcntl(socket_, F_SETFL, flags);
 
     configure_socket_options();
@@ -98,82 +101,64 @@ bool tcp_client::connect() {
 }
 
 void tcp_client::configure_socket_options() {
-    // Set keepalive options
+    // Keepalive
     int keepalive = 1;
     if (setsockopt(socket_, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0) {
-        std::cerr << "Failed to set keepalive: " << std::endl;
+        std::cerr << "Failed to set SO_KEEPALIVE, errno=" << errno << std::endl;
     }
 
-    int keepalive_time = g_keepalive_time;
+    int keepalive_time = g_keepalive_time; // in seconds
     if (setsockopt(socket_, IPPROTO_TCP, TCP_KEEPIDLE, &keepalive_time, sizeof(keepalive_time)) < 0) {
-        std::cerr << "Failed to set keepalive time: " << std::endl;
+        std::cerr << "Failed to set TCP_KEEPIDLE, errno=" << errno << std::endl;
     }
 
-    int keepalive_interval = g_keepalive_interval;
+    int keepalive_interval = g_keepalive_interval; // in seconds
     if (setsockopt(socket_, IPPROTO_TCP, TCP_KEEPINTVL, &keepalive_interval, sizeof(keepalive_interval)) < 0) {
-        std::cerr << "Failed to set keepalive interval: " << std::endl;
+        std::cerr << "Failed to set TCP_KEEPINTVL, errno=" << errno << std::endl;
     }
 
-    // Set send buffer size
+    // Send buffer
     int send_buffer_size = g_socket_send_size;
     if (setsockopt(socket_, SOL_SOCKET, SO_SNDBUF, &send_buffer_size, sizeof(send_buffer_size)) < 0) {
-        std::cerr << "Failed to set send buffer size: " << std::endl;
+        std::cerr << "Failed to set SO_SNDBUF, errno=" << errno << std::endl;
+    }
+
+    // Optional: enable TCP_NODELAY (disable Nagle’s algorithm)
+    int tcp_no_delay = 1;
+    if (setsockopt(socket_, IPPROTO_TCP, TCP_NODELAY, &tcp_no_delay, sizeof(tcp_no_delay)) < 0) {
+        std::cerr << "Failed to set TCP_NODELAY, errno=" << errno << std::endl;
     }
 }
 
 int tcp_client::send_data(const char* data, size_t data_size) {
-    const size_t chunk_size = 32 * 1024 * 1024; // 32MB chunk size
-    const int max_retries = 3;
-    const int base_delay_ms = 100;
-    const int send_timeout_sec = 10;
+    // We want to send 2 MB in one logical message.  We do a loop in case
+    // `send()` writes fewer bytes than requested.
+    static const size_t CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB
+    // If your data_size is always exactly 2 MB, you could
+    // just do one loop. But let's keep it robust:
 
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    // Set send timeout
-    struct timeval send_timeout;
-    send_timeout.tv_sec = send_timeout_sec;
-    send_timeout.tv_usec = 0;
-    if (setsockopt(socket_, SOL_SOCKET, SO_SNDTIMEO, &send_timeout, sizeof(send_timeout)) < 0) {
-        std::cerr << "Failed to set send timeout: " << std::endl;
-    }
-
-    // Enable TCP_NODELAY
-    int tcp_no_delay = 1;
-    if (setsockopt(socket_, IPPROTO_TCP, TCP_NODELAY, &tcp_no_delay, sizeof(tcp_no_delay)) < 0) {
-        std::cerr << "Failed to set TCP_NODELAY: " << std::endl;
+    if (!is_connected()) {
+        return -1;
     }
 
     size_t total_sent = 0;
-    int retry_count = 0;
-
     while (total_sent < data_size) {
-        size_t current_chunk_size = std::min(chunk_size, data_size - total_sent);
-        const char* current_chunk_data = data + total_sent;
-        size_t chunk_sent = 0;
+        // We can do smaller increments if desired, but here we attempt 2MB at once
+        size_t to_send = std::min(CHUNK_SIZE, data_size - total_sent);
 
-        while (chunk_sent < current_chunk_size) {
-            ssize_t res = send(socket_, current_chunk_data + chunk_sent, 
-                             current_chunk_size - chunk_sent, 0);
-
-            if (res < 0) {
-                if ((errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) && 
-                    retry_count < max_retries) {
-                    retry_count++;
-                    int delay = base_delay_ms * (1 << retry_count);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(delay));
-                    continue;
-                }
-                std::cerr << "Error sending data: " << std::endl;
-                ::close(socket_);
-                socket_ = -1;
-                return -1;
+        ssize_t res = ::send(socket_, data + total_sent, to_send, 0);
+        if (res < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+                // A short wait then retry
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                continue;
             }
-
-            chunk_sent += res;
+            std::cerr << "Error sending data, errno=" << errno << std::endl;
+            ::close(socket_);
+            socket_ = -1;
+            return -1;
         }
-
-        total_sent += chunk_sent;
-        retry_count = 0;
+        total_sent += static_cast<size_t>(res);
     }
 
     return static_cast<int>(total_sent);
@@ -189,7 +174,7 @@ void tcp_client::close() {
 
 bool tcp_client::is_connected() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    return socket_ != -1;
+    return (socket_ != -1);
 }
 
 void tcp_client::reconnect_client() {
